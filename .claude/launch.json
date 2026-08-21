@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "contable-api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "Contable.API/Contable.API.csproj",
+        "--urls",
+        "http://localhost:5180"
+      ],
+      "port": 5180,
+      "autoPort": false
+    }
+  ]
+}

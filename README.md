@@ -26,22 +26,22 @@ web/                       Angular 18 + Material 18 + Bootstrap 5
 
 ## Cómo se levanta
 
-La API y el front están registrados en `D:/Claude/.claude/launch.json` como `contable-api` y
-`contable-web`.
+Desde la raíz de este repositorio:
 
 ```bash
-cd D:/Claude/Modulo-Contable-Sigemyt/api && dotnet run --project Contable.API
+dotnet run --project Contable.API/Contable.API.csproj --urls http://localhost:5180
 ```
 
-```bash
-cd D:/Claude/Modulo-Contable-Sigemyt/web && npm start
-```
+En Claude Code alcanza con el perfil `contable-api` de `.claude/launch.json`, que hace exactamente
+eso. Las rutas de ese archivo son **relativas a la raíz del repositorio**, para que funcione en
+cualquier máquina donde se clone.
 
 - API: `http://localhost:5180`, Swagger en `/swagger`, health en `/health`
-- Front: `http://localhost:4400`
+- El front está en [`efinten/modulo-contable-web`](https://github.com/efinten/modulo-contable-web)
+  y levanta en `http://localhost:4400`. Se necesitan los dos para trabajar.
 
 ```bash
-cd D:/Claude/Modulo-Contable-Sigemyt/api && dotnet test
+dotnet test
 ```
 
 ## Configuración
