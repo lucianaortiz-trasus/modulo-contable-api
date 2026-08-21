@@ -17,3 +17,7 @@ appsettings.*.Local.json
 .idea/
 *.user
 *.suo
+
+# Documentacion XML que genera el build (GenerateDocumentationFile) dentro del proyecto.
+# Es un artefacto: cambia en cada compilacion y ensucia todos los diffs.
+Contable.API/Contable.API.xml
