@@ -89,13 +89,13 @@ DECLARE
         v_numero          NUMBER;
         v_id_asiento      NUMBER;
         v_fecha           DATE;
-        v_mes             NUMBER;
-        v_dia             NUMBER;
+        v_primer_dia      DATE;
+        v_ultimo_dia      DATE;
+        v_dias            NUMBER;
         v_importe         NUMBER;
         v_importe2        NUMBER;
         v_patron          NUMBER;
         v_tipo            NUMBER;
-        v_mes_tope        NUMBER;
         v_leyenda         VARCHAR2(400);
         v_generados       NUMBER := 0;
 
@@ -127,22 +127,21 @@ DECLARE
         SELECT NVL(MAX(numero), 0) INTO v_numero
           FROM EJECUCION.T_ASIENTOS WHERE id_jurisdiccion = v_id_jurisdiccion;
 
-        -- No se generan asientos con fecha futura.
-        v_mes_tope := CASE WHEN p_anio = EXTRACT(YEAR FROM SYSDATE)
-                           THEN EXTRACT(MONTH FROM SYSDATE)
-                           ELSE 12 END;
+        -- Rango de fechas del ejercicio. No se generan asientos con fecha futura.
+        v_primer_dia := TO_DATE('01/01/' || p_anio, 'DD/MM/YYYY');
+        v_ultimo_dia := LEAST(TO_DATE('31/12/' || p_anio, 'DD/MM/YYYY'), TRUNC(SYSDATE));
+        v_dias       := v_ultimo_dia - v_primer_dia;
 
         FOR i IN 1 .. p_cantidad LOOP
-            v_mes  := MOD(i * 7, v_mes_tope) + 1;
-            v_dia  := MOD(i * 13, 28) + 1;
+            -- La fecha AVANZA CON EL NUMERO, repartida pareja en el ejercicio.
+            --
+            -- Antes se calculaba con MOD(i * 7, ...) para el mes y MOD(i * 13, 28) para el dia, y
+            -- eso daba fechas que saltaban mientras el numero crecia: el asiento 59 caia el 01/01
+            -- y el 27 el 05/01. En un libro real eso no pasa —el numero se asigna al registrar—, y
+            -- hacia que el Libro Diario, que ordena por fecha y despues por numero, se viera
+            -- desordenado aunque estuviera bien ordenado.
+            v_fecha := v_primer_dia + FLOOR((i - 1) * v_dias / GREATEST(p_cantidad - 1, 1));
 
-            IF p_anio = EXTRACT(YEAR FROM SYSDATE)
-               AND v_mes = EXTRACT(MONTH FROM SYSDATE)
-               AND v_dia > EXTRACT(DAY FROM SYSDATE) THEN
-                v_dia := EXTRACT(DAY FROM SYSDATE);
-            END IF;
-
-            v_fecha   := TO_DATE(LPAD(v_dia, 2, '0') || '/' || LPAD(v_mes, 2, '0') || '/' || p_anio, 'DD/MM/YYYY');
             v_importe := 1000 + MOD(i * 997, 900000) + MOD(i * 37, 100) / 100;
             v_patron  := MOD(i, 3);
             v_tipo    := CASE WHEN MOD(i, 5) = 0 THEN 2 ELSE 1 END;
