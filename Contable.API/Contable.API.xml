@@ -218,6 +218,16 @@
         <member name="M:Contable.API.Controllers.PlanDeCuentasController.Eliminar(System.Int32)">
             <summary>Elimina una cuenta hoja que no tenga asientos imputados.</summary>
         </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.Importar(Contable.Application.RequestDto.PlanDeCuentas.ImportacionPlanRequest)">
+            <summary>
+            Carga masiva del plan desde una planilla.
+            </summary>
+            <remarks>
+            Con <c>confirmar</c> en <c>false</c> no escribe nada: evalua el archivo contra el plan
+            actual y devuelve que se crearia, que ya existe y que se rechaza, con el motivo de cada
+            rechazo. Con <c>true</c> crea las cuentas, todas en una sola transaccion.
+            </remarks>
+        </member>
         <member name="T:Contable.API.Controllers.ReportesController">
             <summary>
             Reportes contables: libro diario, mayores y sumas y saldos.

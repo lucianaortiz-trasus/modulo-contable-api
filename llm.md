@@ -139,6 +139,7 @@ solas.
 | `ReglasImportesAtipicos` | Deteccion de importes fuera de lo habitual (mediana + MAD) |
 | `ReglasSugerenciaDeImputacion` | Cuentas propuestas al cargar, con su motivo |
 | `ReglasAuditoria`, `ReglasDuplicados` | Catalogo de los 10 controles y deteccion de duplicados |
+| `ReglasImportacionPlanDeCuentas` | Carga masiva del plan: evalua el archivo contra el plan actual y arma el orden de alta |
 
 ### Constantes que se prestan a confusion
 
@@ -181,7 +182,7 @@ Estas ya costaron tiempo. No las repitas.
 | `SeguridadController` | `SeguridadService` | `Login?atoken=&idJur=` — **la puerta de entrada real** |
 | `LoginController` | `JwtService` | `CrearTokenAdmin`, `GetDataToken` |
 | `DiagnosticoController` | `DiagnosticoService` | Estado del modulo y de la conexion |
-| `PlanDeCuentasController` | `PlanDeCuentasService` | Arbol, alta, edicion, baja, buscador |
+| `PlanDeCuentasController` | `PlanDeCuentasService` | Arbol, alta, edicion, baja, buscador, `Importar` (carga masiva) |
 | `MatrizContableController` | `MatrizContableService` | Listado, alta, baja, importacion del ejercicio anterior |
 | `AsientosController` | `AsientoService` | `Buscar`, `Tipos`, alta, `Reversar`, `Anular`, `PlanCierre` |
 | `ReportesController` | `ReportesService` | `SumasYSaldos`, `LibroDiario`, `Mayores` |

@@ -21,4 +21,10 @@ public interface IPlanDeCuentasService
     Task<OperationResponse<CuentaContableResponse>> Editar(int idCtaContable, CuentaContableRequest request);
 
     Task<OperationResponse<bool>> Eliminar(int idCtaContable);
+
+    /// <summary>
+    /// Carga masiva desde una planilla. Con `Confirmar` en false devuelve que pasaria; en true
+    /// crea las cuentas, todas en una sola transaccion.
+    /// </summary>
+    Task<OperationResponse<ImportacionPlanResponse>> Importar(ImportacionPlanRequest request);
 }

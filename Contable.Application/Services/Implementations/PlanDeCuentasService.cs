@@ -320,6 +320,165 @@ public class PlanDeCuentasService(
     /// Base de toda consulta del plan. Acota a la jurisdiccion del usuario cuando hay token; sin
     /// token (solo en desarrollo, con UseAuth apagado) devuelve todo.
     /// </summary>
+    /// <summary>
+    /// Carga masiva del plan desde una planilla.
+    /// </summary>
+    /// <remarks>
+    /// Con `Confirmar` en false solo evalua y devuelve que pasaria; en true crea las cuentas. Es el
+    /// mismo patron que el cierre de ejercicio: primero se mira, despues se confirma.
+    ///
+    /// La validacion **se rehace del lado del servidor** aunque el front ya haya interpretado el
+    /// archivo. Lo que manda el navegador no se da por bueno.
+    ///
+    /// Todo el alta va en **una sola transaccion**: o entra el archivo entero o no entra nada. Un
+    /// plan de cuentas a medias, con ramas colgando de padres que no se llegaron a crear, es peor
+    /// que no haber importado.
+    /// </remarks>
+    public async Task<OperationResponse<ImportacionPlanResponse>> Importar(ImportacionPlanRequest request)
+    {
+        var filas = request.Filas ?? [];
+
+        if (filas.Count == 0)
+            return BadRequest<ImportacionPlanResponse>("El archivo no tiene ninguna fila.");
+
+        if (filas.Count > ReglasImportacionPlanDeCuentas.MaximoDeFilas)
+        {
+            return BadRequest<ImportacionPlanResponse>(
+                $"El archivo tiene {filas.Count} filas y el maximo es " +
+                $"{ReglasImportacionPlanDeCuentas.MaximoDeFilas}. Conviene partirlo.");
+        }
+
+        var existentes = await ConsultaBase()
+            .Select(c => new { c.Codigo, c.Imputable })
+            .ToListAsync();
+
+        var codigos = new HashSet<string>(
+            existentes.Select(c => CodigoCuenta.Normalizar(c.Codigo)), StringComparer.Ordinal);
+
+        var imputables = new HashSet<string>(
+            existentes.Where(c => c.Imputable == Si).Select(c => CodigoCuenta.Normalizar(c.Codigo)),
+            StringComparer.Ordinal);
+
+        var plan = ReglasImportacionPlanDeCuentas.Evaluar(
+            filas.Select(f => new FilaImportada(f.Fila, f.Codigo, f.Nombre, f.TipoSaldo, f.Imputable, f.IdNaturaleza)),
+            codigos,
+            imputables);
+
+        var respuesta = MapearPlan(plan);
+
+        if (!request.Confirmar) return Ok(respuesta);
+
+        if (plan.ACrear == 0)
+            return BadRequest<ImportacionPlanResponse>("No hay ninguna cuenta para crear.", respuesta);
+
+        var creadas = await CrearDesdeElPlan(plan);
+
+        respuesta.Confirmado = true;
+        respuesta.Creadas = creadas;
+
+        return Ok(respuesta);
+    }
+
+    private async Task<int> CrearDesdeElPlan(PlanDeImportacionDeCuentas plan)
+    {
+        // El id del padre se resuelve sobre la marcha: una cuenta creada en esta misma importacion
+        // todavia no esta en la base cuando se procesa su hija, asi que se va guardando por codigo.
+        var idsPorCodigo = await ConsultaBase()
+            .Select(c => new { c.Codigo, c.IdCtaContable, c.IdJurisdiccion, c.IdVigencia, c.IdNaturaleza })
+            .ToListAsync();
+
+        var idPorCodigo = idsPorCodigo
+            .GroupBy(c => CodigoCuenta.Normalizar(c.Codigo), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().IdCtaContable, StringComparer.Ordinal);
+
+        var datosPorCodigo = idsPorCodigo
+            .GroupBy(c => CodigoCuenta.Normalizar(c.Codigo), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        var jurisdiccion = GetJurisdiccionCache();
+        var vigencia = GetIdVigencia();
+        var usuario = GetUserCache();
+        var ahora = DateTime.Now;
+
+        await using var transaccion = await _ejecucionContext.Database.BeginTransactionAsync();
+
+        var creadas = 0;
+
+        foreach (var fila in plan.ParaCrear)
+        {
+            int? idPadre = null;
+
+            if (!string.IsNullOrEmpty(fila.CodigoPadre) && idPorCodigo.TryGetValue(fila.CodigoPadre, out var id))
+                idPadre = id;
+
+            datosPorCodigo.TryGetValue(fila.CodigoPadre, out var padre);
+
+            var cuenta = new TCuentaContable
+            {
+                IdCtaContable = await GetSecuencia(_ejecucionContext, Secuencia),
+                IdCtaContableRel = idPadre,
+                Codigo = fila.Codigo,
+                Nombre = fila.Nombre!.Trim(),
+                Nivel = fila.Nivel,
+                Activa = Activa,
+                Imputable = fila.Imputable ? Si : No,
+                TipoSaldo = fila.TipoSaldo,
+                // La naturaleza se hereda del padre si el archivo no la trae: es lo mismo que hace
+                // el alta de a una, y evita tener que repetirla en cada fila de la planilla.
+                IdNaturaleza = fila.IdNaturaleza ?? padre?.IdNaturaleza,
+                Auxiliar = No,
+                AsientoOps = No,
+                Inventariable = No,
+                Amortizacion = 0,
+                IngresoPropio = 0,
+                IdJurisdiccion = padre?.IdJurisdiccion ?? jurisdiccion,
+                IdVigencia = padre?.IdVigencia ?? vigencia,
+                UserIng = usuario,
+                FecIng = ahora,
+            };
+
+            _ejecucionContext.TCuentasContables.Add(cuenta);
+            await _ejecucionContext.SaveChangesAsync();
+
+            idPorCodigo[fila.Codigo] = cuenta.IdCtaContable;
+            datosPorCodigo[fila.Codigo] = new
+            {
+                cuenta.Codigo,
+                cuenta.IdCtaContable,
+                cuenta.IdJurisdiccion,
+                cuenta.IdVigencia,
+                cuenta.IdNaturaleza,
+            };
+
+            creadas++;
+        }
+
+        await transaccion.CommitAsync();
+
+        return creadas;
+    }
+
+    private static ImportacionPlanResponse MapearPlan(PlanDeImportacionDeCuentas plan) => new()
+    {
+        Total = plan.Total,
+        ACrear = plan.ACrear,
+        YaExisten = plan.YaExisten,
+        Rechazadas = plan.Rechazadas,
+        Confirmado = false,
+        Creadas = 0,
+        Filas = [.. plan.Filas.Select(f => new FilaDeImportacionResponse
+        {
+            Fila = f.Fila,
+            Codigo = string.IsNullOrEmpty(f.Codigo) ? f.CodigoOriginal : f.Codigo,
+            Nombre = f.Nombre,
+            Nivel = f.Nivel,
+            TipoSaldo = f.TipoSaldo,
+            Imputable = f.Imputable,
+            Estado = f.Estado.ToString(),
+            Motivo = f.Motivo,
+        })],
+    };
+
     private IQueryable<TCuentaContable> ConsultaBase()
     {
         var consulta = _ejecucionContext.TCuentasContables.AsNoTracking();

@@ -336,6 +336,29 @@ al scroll, y hoja de estilos de impresión que oculta el índice y arranca cada 
 nueva. Está escrito para quien va a usar el módulo, no para quien lo programó: explica cuándo
 anular y cuándo reversar, por qué el balance puede no cuadrar, y qué hacer cuando algo no sale.
 
+### Carga masiva del plan de cuentas
+
+Se sube una planilla `.xlsx` y el módulo **primero muestra qué va a pasar**: cuántas cuentas crea,
+cuántas ya estaban y cuántas rechaza, con el motivo de cada rechazo y el número de fila. Recién con
+la confirmación escribe, y todo va en **una sola transacción**: un plan a medias, con ramas
+colgando de padres que no se llegaron a crear, es peor que no haber importado.
+
+Tres decisiones que valen la pena:
+
+- **Las cuentas que ya existen se omiten, no son un error.** Importar agrega, no pisa. Reescribir
+  cuentas existentes desde una planilla es la clase de operación que rompe la contabilidad sin
+  dejar rastro. El efecto práctico es que la planilla se puede corregir y volver a subir las veces
+  que haga falta.
+- **El archivo no necesita estar ordenado.** La evaluación se hace por código, no por orden de
+  fila, así que una hija listada antes que su padre se resuelve igual. El encabezado tampoco tiene
+  que estar en la primera fila.
+- **El archivo lo lee el front** —`exceljs` ya está cargado para exportar—, pero el backend
+  **revalida todo**. Lo que manda el navegador no se da por bueno.
+
+Un padre rechazado arrastra a sus hijas, porque colgarían de una cuenta que no va a existir. Eso
+está cubierto por tests, junto con los duplicados dentro del archivo, el padre imputable, el código
+mal formado y la normalización (`1.1` y `01.01` son la misma cuenta).
+
 ### Deuda de la fase 6
 
 El mayor **de todas las cuentas** tarda unos diez segundos: arma 155 mayores en una sola respuesta.

@@ -61,4 +61,17 @@ public class PlanDeCuentasController(IPlanDeCuentasService servicio) : BaseContr
     [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Eliminar(int idCtaContable)
         => Return(await _servicio.Eliminar(idCtaContable));
+
+    /// <summary>
+    /// Carga masiva del plan desde una planilla.
+    /// </summary>
+    /// <remarks>
+    /// Con <c>confirmar</c> en <c>false</c> no escribe nada: evalua el archivo contra el plan
+    /// actual y devuelve que se crearia, que ya existe y que se rechaza, con el motivo de cada
+    /// rechazo. Con <c>true</c> crea las cuentas, todas en una sola transaccion.
+    /// </remarks>
+    [HttpPost("Importar")]
+    [ProducesResponseType(typeof(OperationResponse<ImportacionPlanResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Importar([FromBody] ImportacionPlanRequest request)
+        => Return(await _servicio.Importar(request));
 }
