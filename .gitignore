@@ -1,0 +1,19 @@
+# Compilacion
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+# Salida de build-api.cmd, lista para desplegar
+/dist
+
+# Configuracion local: appsettings.Development.json tiene las credenciales del stage y
+# NUNCA debe subirse. El de Contable.API/ ya lo ignora; esto es un segundo cerrojo.
+appsettings.Development.json
+appsettings.*.Local.json
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo

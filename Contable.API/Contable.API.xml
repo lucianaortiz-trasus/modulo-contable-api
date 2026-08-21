@@ -1,0 +1,302 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Contable.API</name>
+    </assembly>
+    <members>
+        <member name="T:Contable.API.Config.ServicesConfig">
+            <summary>
+            Armado del contenedor de dependencias.
+            </summary>
+        </member>
+        <member name="T:Contable.API.Controllers.AsientosController">
+            <summary>
+            Asientos contables: consulta, alta manual, reversa, anulacion, cierre y apertura de ejercicio.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.#ctor(Contable.Application.Services.Interfaces.IAsientoService)">
+            <summary>
+            Asientos contables: consulta, alta manual, reversa, anulacion, cierre y apertura de ejercicio.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.Buscar(Contable.Application.RequestDto.Asientos.FiltroAsientosRequest)">
+            <summary>Grilla paginada. Sin ejercicio ni jurisdiccion explicitos usa los del token.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.GetTipos">
+            <summary>Catalogo de tipos de asiento.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.GetPorId(System.Int32)">
+            <summary>Asiento completo con sus renglones.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.Crear(Contable.Application.RequestDto.Asientos.AsientoRequest)">
+            <summary>
+            Alta de un asiento manual. Cabecera y renglones entran en una sola transaccion, y el
+            asiento tiene que cuadrar antes de grabarse.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.Reversar(System.Int32)">
+            <summary>
+            Reversa: genera el contraasiento con la fecha recalculada segun el ejercicio y marca los
+            dos como anulados. No borra nada.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.Anular(System.Int32)">
+            <summary>
+            Anulacion: genera el contraasiento conservando la fecha contable del original, de modo que
+            el par se cancela dentro del mismo periodo.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.PlanificarCierre(System.Int32)">
+            <summary>Vista previa del cierre de ejercicio. No escribe nada.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.GenerarCierre(System.Int32)">
+            <summary>Genera los dos asientos de cierre del ejercicio.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.PlanificarApertura(System.Int32)">
+            <summary>Vista previa de la apertura de ejercicio. No escribe nada.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AsientosController.GenerarApertura(System.Int32)">
+            <summary>Genera el asiento de apertura desde el cierre del ejercicio anterior.</summary>
+        </member>
+        <member name="T:Contable.API.Controllers.AuditoriaController">
+            <summary>
+            Controles de consistencia sobre los datos contables del ejercicio.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AuditoriaController.#ctor(Contable.Application.Services.Interfaces.IAuditoriaService)">
+            <summary>
+            Controles de consistencia sobre los datos contables del ejercicio.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.AuditoriaController.Auditar(System.Nullable{System.Int32})">
+            <summary>
+            Corre los diez controles y devuelve los hallazgos agrupados por tipo, cada grupo con su
+            severidad y la explicacion de que conviene hacer.
+            </summary>
+        </member>
+        <member name="T:Contable.API.Controllers.BaseController">
+            <summary>
+            Base de todos los controllers: traduce el Code de OperationResponse al IActionResult.
+            </summary>
+        </member>
+        <member name="T:Contable.API.Controllers.DiagnosticoController">
+            <summary>
+            Prueba de humo del modulo. Es el endpoint que se usa para confirmar que el armado llega a los
+            datos contables reales sin depender del front.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.DiagnosticoController.#ctor(Contable.Application.Services.Interfaces.IDiagnosticoService)">
+            <summary>
+            Prueba de humo del modulo. Es el endpoint que se usa para confirmar que el armado llega a los
+            datos contables reales sin depender del front.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.DiagnosticoController.Get">
+            <summary>Estado de los datos contables: plan de cuentas, asientos, matriz y vigencia activa.</summary>
+        </member>
+        <member name="T:Contable.API.Controllers.EstadisticasController">
+            <summary>
+            Estadisticas del modulo contable y las ayudas de carga que se apoyan en el historial.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.EstadisticasController.#ctor(Contable.Application.Services.Interfaces.IEstadisticasService)">
+            <summary>
+            Estadisticas del modulo contable y las ayudas de carga que se apoyan en el historial.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.EstadisticasController.Tablero(System.Nullable{System.Int32})">
+            <summary>Indicadores de cabecera: volumen, cobertura del plan y hallazgos abiertos.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.EstadisticasController.Actividad(System.Nullable{System.Int32})">
+            <summary>Asientos por mes y por tipo, contra el mismo corte del ejercicio anterior.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.EstadisticasController.Cuentas(System.Nullable{System.Int32})">
+            <summary>Cuentas mas movidas, cuentas imputables sin uso y concentracion del movimiento.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.EstadisticasController.Calidad(System.Nullable{System.Int32})">
+            <summary>Desfase entre la fecha contable y la de carga, por usuario y por tramo.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.EstadisticasController.SugerirCuentas(System.String,System.Nullable{System.Int32},System.Nullable{System.Int32})">
+            <summary>
+            Cuentas propuestas para imputar un renglon. Primero la que indica la matriz contable,
+            despues las que se usaron en asientos con leyenda parecida, y por ultimo las mas frecuentes.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.EstadisticasController.RevisarImporte(System.Int32,System.Decimal)">
+            <summary>Avisa si el importe se aparta de lo habitual para esa cuenta.</summary>
+        </member>
+        <member name="T:Contable.API.Controllers.LoginController">
+            <summary>
+            Puente con el portal SIGEMyT. Mismo contrato que el modulo de Tesoreria.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.LoginController.#ctor(Contable.Application.Services.Interfaces.IJwtService)">
+            <summary>
+            Puente con el portal SIGEMyT. Mismo contrato que el modulo de Tesoreria.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.LoginController.CrearTokenAdmin(System.Int32)">
+            <summary>Emite el token del modulo para un usuario ya autenticado por el portal.</summary>
+            <param name="idUsuario">Id del usuario del portal.</param>
+        </member>
+        <member name="M:Contable.API.Controllers.LoginController.GetDataToken">
+            <summary>
+            Devuelve los datos del usuario del token con el que vino el pedido.
+            </summary>
+            <remarks>
+            El token va en el header <c>Authorization</c>, no por querystring: es una credencial y en la
+            URL terminaba en los logs del servidor y en el historial del navegador.
+            </remarks>
+        </member>
+        <member name="T:Contable.API.Controllers.MatrizContableController">
+            <summary>
+            Matriz contable: relaciona cada partida presupuestaria con la cuenta que recibe su movimiento.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.MatrizContableController.#ctor(Contable.Application.Services.Interfaces.IMatrizContableService)">
+            <summary>
+            Matriz contable: relaciona cada partida presupuestaria con la cuenta que recibe su movimiento.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.MatrizContableController.Buscar(Contable.Application.RequestDto.MatrizContable.FiltroMatrizRequest)">
+            <summary>Grilla paginada. Sin ejercicio explicito usa el del token.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.MatrizContableController.Crear(Contable.Application.RequestDto.MatrizContable.MatrizContableRequest)">
+            <summary>Relaciona una cuenta con un objeto de gasto o con un recurso, nunca con los dos.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.MatrizContableController.BuscarObjetosGasto(Contable.Application.RequestDto.MatrizContable.FiltroPartidaRequest)">
+            <summary>Objetos de gasto para el selector de partidas.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.MatrizContableController.BuscarRecursos(Contable.Application.RequestDto.MatrizContable.FiltroPartidaRequest)">
+            <summary>Recursos para el selector de partidas.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.MatrizContableController.PlanificarImportacion(System.Int32)">
+            <summary>
+            Vista previa del traslado de la matriz desde el ejercicio anterior. No escribe nada:
+            permite ver que se va a importar y que no se puede trasladar antes de confirmar.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.MatrizContableController.Importar(System.Int32)">
+            <summary>Ejecuta el traslado de la matriz desde el ejercicio anterior.</summary>
+        </member>
+        <member name="T:Contable.API.Controllers.PlanDeCuentasController">
+            <summary>
+            Plan de cuentas: arbol jerarquico, grilla y ABM.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.#ctor(Contable.Application.Services.Interfaces.IPlanDeCuentasService)">
+            <summary>
+            Plan de cuentas: arbol jerarquico, grilla y ABM.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.GetArbol(System.Boolean)">
+            <summary>
+            Arbol completo del plan, con el detalle de las cuentas que tienen problemas estructurales.
+            </summary>
+            <param name="incluirInactivas">Si se muestran tambien las cuentas dadas de baja.</param>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.Buscar(Contable.Application.RequestDto.PlanDeCuentas.FiltroCuentasRequest)">
+            <summary>Busqueda paginada para la grilla.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.GetPorId(System.Int32)">
+            <summary>Devuelve una cuenta con su cantidad de hijas y si tiene movimientos.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.GetProximoCodigo(System.Nullable{System.Int32})">
+            <summary>
+            Proximo codigo libre bajo la cuenta indicada. Sin parametro calcula el de una cuenta raiz.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.Crear(Contable.Application.RequestDto.PlanDeCuentas.CuentaContableRequest)">
+            <summary>Da de alta una cuenta. Sin codigo explicito toma el proximo libre bajo el padre.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.Editar(System.Int32,Contable.Application.RequestDto.PlanDeCuentas.CuentaContableRequest)">
+            <summary>
+            Modifica una cuenta. El codigo y la cuenta padre no se editan: mover una cuenta arrastra a
+            toda su rama y a los asientos ya imputados.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.PlanDeCuentasController.Eliminar(System.Int32)">
+            <summary>Elimina una cuenta hoja que no tenga asientos imputados.</summary>
+        </member>
+        <member name="T:Contable.API.Controllers.ReportesController">
+            <summary>
+            Reportes contables: libro diario, mayores y sumas y saldos.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.ReportesController.#ctor(Contable.Application.Services.Interfaces.IReportesService)">
+            <summary>
+            Reportes contables: libro diario, mayores y sumas y saldos.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.ReportesController.SumasYSaldos(Contable.Application.RequestDto.Reportes.FiltroReporteRequest)">
+            <summary>
+            Balance de sumas y saldos. Una fila por cuenta, con las sumas del periodo, las anteriores
+            y el saldo resultante, consolidando cada nivel con el total de su rama.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Controllers.ReportesController.LibroDiario(Contable.Application.RequestDto.Reportes.FiltroReporteRequest)">
+            <summary>Libro diario: los asientos del periodo en orden cronologico, con su detalle.</summary>
+        </member>
+        <member name="M:Contable.API.Controllers.ReportesController.Mayores(Contable.Application.RequestDto.Reportes.FiltroMayoresRequest)">
+            <summary>Mayor de una cuenta, o de todas las imputables si no se indica ninguna.</summary>
+        </member>
+        <member name="T:Contable.API.Controllers.SeguridadController">
+            <summary>
+            Federacion de la sesion con el Portal SIGEMyT.
+            </summary>
+            <remarks>
+            La ruta reproduce la que usan los otros modulos de la plataforma —<c>api/Seguridad/Login</c>—
+            para que el contrato sea uno solo en todos.
+            </remarks>
+        </member>
+        <member name="M:Contable.API.Controllers.SeguridadController.#ctor(Contable.Application.Services.Interfaces.ISeguridadService)">
+            <summary>
+            Federacion de la sesion con el Portal SIGEMyT.
+            </summary>
+            <remarks>
+            La ruta reproduce la que usan los otros modulos de la plataforma —<c>api/Seguridad/Login</c>—
+            para que el contrato sea uno solo en todos.
+            </remarks>
+        </member>
+        <member name="M:Contable.API.Controllers.SeguridadController.Login(System.String,System.Nullable{System.Int32})">
+            <summary>
+            Canjea el token con el que el Portal mando al usuario por el token propio del modulo.
+            </summary>
+            <param name="atoken">
+            El <c>token</c> del querystring con el que llego el usuario. Es opaco: este modulo no lo
+            desencripta, lo reenvia al Portal para que diga quien es.
+            </param>
+            <param name="idJur">Jurisdiccion con la que el Portal mando al usuario.</param>
+        </member>
+        <member name="T:Contable.API.HealthChecks.DatabaseEjecucionHealthCheck">
+            <summary>Verifica que el esquema Ejecucion responda.</summary>
+        </member>
+        <member name="M:Contable.API.HealthChecks.DatabaseEjecucionHealthCheck.#ctor(Contable.Domain.ModelsEjecucion.EjecucionContext)">
+            <summary>Verifica que el esquema Ejecucion responda.</summary>
+        </member>
+        <member name="T:Contable.API.HealthChecks.DatabasePortalHealthCheck">
+            <summary>Verifica que el esquema Portal responda.</summary>
+        </member>
+        <member name="M:Contable.API.HealthChecks.DatabasePortalHealthCheck.#ctor(Contable.Domain.ModelsPortal.PortalContext)">
+            <summary>Verifica que el esquema Portal responda.</summary>
+        </member>
+        <member name="T:Contable.API.HealthChecks.DatabasePresupuestoHealthCheck">
+            <summary>Verifica que el esquema Presupuesto responda.</summary>
+        </member>
+        <member name="M:Contable.API.HealthChecks.DatabasePresupuestoHealthCheck.#ctor(Contable.Domain.ModelsPresupuesto.PresupuestoContext)">
+            <summary>Verifica que el esquema Presupuesto responda.</summary>
+        </member>
+        <member name="T:Contable.API.Middleware.GlobalExceptionHandlingMiddleware">
+            <summary>
+            Captura lo que se escape de los servicios y lo devuelve con el mismo contrato que el resto
+            de la API, en vez de una pagina de error.
+            </summary>
+        </member>
+        <member name="M:Contable.API.Middleware.GlobalExceptionHandlingMiddleware.#ctor(Microsoft.AspNetCore.Http.RequestDelegate,Microsoft.Extensions.Logging.ILogger{Contable.API.Middleware.GlobalExceptionHandlingMiddleware})">
+            <summary>
+            Captura lo que se escape de los servicios y lo devuelve con el mismo contrato que el resto
+            de la API, en vez de una pagina de error.
+            </summary>
+        </member>
+    </members>
+</doc>

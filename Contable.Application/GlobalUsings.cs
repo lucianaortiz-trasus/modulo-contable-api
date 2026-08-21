@@ -1,0 +1,16 @@
+global using System.IdentityModel.Tokens.Jwt;
+global using Microsoft.Extensions.Configuration;
+global using System.Security.Claims;
+global using System.Text;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.Caching.Memory;
+global using Microsoft.IdentityModel.Tokens;
+global using Contable.Application.ResponseDto.Common;
+global using Contable.Application.ResponseDto.Dtos.Jwt;
+global using Contable.Application.Services;
+global using Contable.Application.Services.Interfaces;
+global using Contable.Domain.ModelsEjecucion;
+global using Contable.Domain.ModelsPortal;
+global using Contable.Domain.ModelsPresupuesto;
+global using Microsoft.Extensions.Logging;
