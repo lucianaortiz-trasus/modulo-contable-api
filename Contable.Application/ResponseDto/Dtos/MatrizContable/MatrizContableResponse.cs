@@ -26,6 +26,10 @@ public class MatrizContableResponse
     /// <summary>"Gasto" o "Recurso". Vacio si la fila esta mal cargada.</summary>
     public string? TipoPartida { get; set; }
 
+    public bool Activa { get; set; } = true;
+
+    public string Estado => Activa ? "Activa" : "Inactiva";
+
     public int? IdVigencia { get; set; }
 
     public int? Ejercicio { get; set; }
@@ -84,4 +88,34 @@ public class FilaNoImportableResponse
     public long? NumeroPartida { get; set; }
 
     public string Motivo { get; set; } = string.Empty;
+}
+
+/// <summary>Nodo de árbol de partida presupuestaria (Objeto de Gasto o Recurso) para modales de selección.</summary>
+public class PartidaArbolResponse
+{
+    public int Id { get; set; }
+
+    public int? IdPadre { get; set; }
+
+    public long? Numero { get; set; }
+
+    public string Codigo => Numero?.ToString() ?? string.Empty;
+
+    public string? Nombre { get; set; }
+
+    public bool EsHoja { get; set; }
+
+    public List<PartidaArbolResponse> Hijas { get; set; } = [];
+}
+
+/// <summary>Estado de partidas sin relacionar en la matriz contable.</summary>
+public class PendientesMatrizResponse
+{
+    public bool HayPendientes => TotalPendientes > 0;
+
+    public int TotalPendientes => GastosSinRelacionar + RecursosSinRelacionar;
+
+    public int GastosSinRelacionar { get; set; }
+
+    public int RecursosSinRelacionar { get; set; }
 }

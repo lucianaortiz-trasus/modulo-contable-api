@@ -34,9 +34,23 @@ public class MatrizContableService(
         var vigencia = filtro.IdVigencia ?? GetIdVigencia();
         if (vigencia > 0) consulta = consulta.Where(m => m.IdVigencia == vigencia);
 
-        if (filtro.IdCtaContable is > 0) consulta = consulta.Where(m => m.IdCtaContable == filtro.IdCtaContable);
-        if (filtro.IdObjetoGasto is > 0) consulta = consulta.Where(m => m.IdObjetoGasto == filtro.IdObjetoGasto);
-        if (filtro.IdRecurso is > 0) consulta = consulta.Where(m => m.IdRecurso == filtro.IdRecurso);
+        if (filtro.IdCtaContable is > 0)
+        {
+            var idsCuentas = await ObtenerDescendientesCuenta(filtro.IdCtaContable.Value, vigencia);
+            consulta = consulta.Where(m => m.IdCtaContable != null && idsCuentas.Contains(m.IdCtaContable.Value));
+        }
+
+        if (filtro.IdObjetoGasto is > 0)
+        {
+            var idsObjetos = await ObtenerDescendientesObjetoGasto(filtro.IdObjetoGasto.Value, vigencia);
+            consulta = consulta.Where(m => m.IdObjetoGasto != null && idsObjetos.Contains(m.IdObjetoGasto.Value));
+        }
+
+        if (filtro.IdRecurso is > 0)
+        {
+            var idsRecursos = await ObtenerDescendientesRecurso(filtro.IdRecurso.Value, vigencia);
+            consulta = consulta.Where(m => m.IdRecurso != null && idsRecursos.Contains(m.IdRecurso.Value));
+        }
 
         if (string.Equals(filtro.TipoPartida, "Gasto", StringComparison.OrdinalIgnoreCase))
         {
@@ -47,15 +61,30 @@ public class MatrizContableService(
             consulta = consulta.Where(m => m.IdRecurso != null);
         }
 
-        var total = await consulta.CountAsync();
+        var todasLasFilas = await consulta.ToListAsync();
+        var enriquecidas = await Enriquecer(todasLasFilas);
 
-        var filas = await consulta
-            .OrderBy(m => m.IdMatrizCble)
+        if (!string.IsNullOrWhiteSpace(filtro.Estado) && !string.Equals(filtro.Estado, "Todos", StringComparison.OrdinalIgnoreCase))
+        {
+            var activaFiltro = string.Equals(filtro.Estado, "Activa", StringComparison.OrdinalIgnoreCase);
+            enriquecidas = enriquecidas.Where(f => f.Activa == activaFiltro).ToList();
+        }
+
+        var ordenadas = enriquecidas
+            .OrderBy(f => f.CodigoCuenta ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.NombreCuenta ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.TipoPartida ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.NumeroObjeto?.ToString() ?? f.NumeroRecurso?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.NombreObjeto ?? f.NombreRecurso ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var total = ordenadas.Count;
+        var paged = ordenadas
             .Skip((pagina - 1) * tamano)
             .Take(tamano)
-            .ToListAsync();
+            .ToList();
 
-        return Paginado(await Enriquecer(filas), total);
+        return Paginado(paged, total);
     }
 
     public async Task<OperationResponse<MatrizContableResponse>> GetPorId(int idMatrizCble)
@@ -436,6 +465,212 @@ public class MatrizContableService(
             PartidaYaAsignadaA: partidaYaAsignadaA);
     }
 
+    public async Task<OperationResponse<List<PartidaArbolResponse>>> GetArbolObjetosGasto(int? idVigencia)
+    {
+        var vigencia = idVigencia ?? GetIdVigencia();
+        var consulta = _presupuestoContext.TObjetosGasto.AsNoTracking();
+        if (vigencia > 0) consulta = consulta.Where(o => o.IdVigencia == vigencia);
+
+        var lista = await consulta
+            .OrderBy(o => o.NumeroObjeto)
+            .ToListAsync();
+
+        var nodos = lista.ToDictionary(
+            o => o.IdObjetoGasto,
+            o => new PartidaArbolResponse
+            {
+                Id = o.IdObjetoGasto,
+                IdPadre = o.IdObjetoGastoRel,
+                Numero = o.NumeroObjeto,
+                Nombre = o.NombreObjeto,
+                EsHoja = o.EsUltimoNivel
+            });
+
+        var raices = new List<PartidaArbolResponse>();
+        foreach (var o in lista)
+        {
+            var nodo = nodos[o.IdObjetoGasto];
+            if (o.IdObjetoGastoRel.HasValue && nodos.TryGetValue(o.IdObjetoGastoRel.Value, out var padre) && padre != nodo)
+            {
+                padre.Hijas.Add(nodo);
+            }
+            else
+            {
+                raices.Add(nodo);
+            }
+        }
+
+        foreach (var n in nodos.Values)
+        {
+            if (n.Hijas.Count == 0) n.EsHoja = true;
+        }
+
+        return Ok(raices);
+    }
+
+    public async Task<OperationResponse<List<PartidaArbolResponse>>> GetArbolRecursos(int? idVigencia)
+    {
+        var vigencia = idVigencia ?? GetIdVigencia();
+        var consulta = _presupuestoContext.TRecursos.AsNoTracking();
+        if (vigencia > 0) consulta = consulta.Where(r => r.IdVigencia == vigencia);
+
+        var lista = await consulta
+            .OrderBy(r => r.NumeroRecurso)
+            .ToListAsync();
+
+        var nodos = lista.ToDictionary(
+            r => r.IdRecurso,
+            r => new PartidaArbolResponse
+            {
+                Id = r.IdRecurso,
+                IdPadre = r.IdRecursoRel,
+                Numero = r.NumeroRecurso,
+                Nombre = r.NombreRecurso,
+                EsHoja = false
+            });
+
+        var raices = new List<PartidaArbolResponse>();
+        foreach (var r in lista)
+        {
+            var nodo = nodos[r.IdRecurso];
+            if (r.IdRecursoRel.HasValue && nodos.TryGetValue(r.IdRecursoRel.Value, out var padre) && padre != nodo)
+            {
+                padre.Hijas.Add(nodo);
+            }
+            else
+            {
+                raices.Add(nodo);
+            }
+        }
+
+        foreach (var n in nodos.Values)
+        {
+            if (n.Hijas.Count == 0) n.EsHoja = true;
+        }
+
+        return Ok(raices);
+    }
+
+    public async Task<OperationResponse<PendientesMatrizResponse>> GetPendientes(int? idVigencia)
+    {
+        var vigencia = idVigencia ?? GetIdVigencia();
+
+        var objetosConCuenta = await _ejecucionContext.TMatrizContable
+            .AsNoTracking()
+            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdObjetoGasto != null)
+            .Select(m => m.IdObjetoGasto!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var recursosConCuenta = await _ejecucionContext.TMatrizContable
+            .AsNoTracking()
+            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdRecurso != null)
+            .Select(m => m.IdRecurso!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var sinRelacionarGastos = await _presupuestoContext.TObjetosGasto
+            .AsNoTracking()
+            .Where(o => (vigencia <= 0 || o.IdVigencia == vigencia) && o.UltimoNivel == "S")
+            .Where(o => !objetosConCuenta.Contains(o.IdObjetoGasto))
+            .CountAsync();
+
+        var idsRecursosPadre = await _presupuestoContext.TRecursos
+            .AsNoTracking()
+            .Where(r => (vigencia <= 0 || r.IdVigencia == vigencia) && r.IdRecursoRel != null)
+            .Select(r => r.IdRecursoRel!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var sinRelacionarRecursos = await _presupuestoContext.TRecursos
+            .AsNoTracking()
+            .Where(r => (vigencia <= 0 || r.IdVigencia == vigencia))
+            .Where(r => !idsRecursosPadre.Contains(r.IdRecurso))
+            .Where(r => !recursosConCuenta.Contains(r.IdRecurso))
+            .CountAsync();
+
+        return Ok(new PendientesMatrizResponse
+        {
+            GastosSinRelacionar = sinRelacionarGastos,
+            RecursosSinRelacionar = sinRelacionarRecursos
+        });
+    }
+
+    private async Task<HashSet<int>> ObtenerDescendientesCuenta(int idCtaContable, int vigencia)
+    {
+        var cuentas = await _ejecucionContext.TCuentasContables
+            .AsNoTracking()
+            .Where(c => vigencia <= 0 || c.IdVigencia == vigencia)
+            .Select(c => new { c.IdCtaContable, c.IdCtaContableRel })
+            .ToListAsync();
+
+        var descendientes = new HashSet<int> { idCtaContable };
+        bool agregado;
+        do
+        {
+            agregado = false;
+            foreach (var c in cuentas)
+            {
+                if (c.IdCtaContableRel.HasValue && descendientes.Contains(c.IdCtaContableRel.Value) && descendientes.Add(c.IdCtaContable))
+                {
+                    agregado = true;
+                }
+            }
+        } while (agregado);
+
+        return descendientes;
+    }
+
+    private async Task<HashSet<int>> ObtenerDescendientesObjetoGasto(int idObjetoGasto, int vigencia)
+    {
+        var objetos = await _presupuestoContext.TObjetosGasto
+            .AsNoTracking()
+            .Where(o => vigencia <= 0 || o.IdVigencia == vigencia)
+            .Select(o => new { o.IdObjetoGasto, o.IdObjetoGastoRel })
+            .ToListAsync();
+
+        var descendientes = new HashSet<int> { idObjetoGasto };
+        bool agregado;
+        do
+        {
+            agregado = false;
+            foreach (var o in objetos)
+            {
+                if (o.IdObjetoGastoRel.HasValue && descendientes.Contains(o.IdObjetoGastoRel.Value) && descendientes.Add(o.IdObjetoGasto))
+                {
+                    agregado = true;
+                }
+            }
+        } while (agregado);
+
+        return descendientes;
+    }
+
+    private async Task<HashSet<int>> ObtenerDescendientesRecurso(int idRecurso, int vigencia)
+    {
+        var recursos = await _presupuestoContext.TRecursos
+            .AsNoTracking()
+            .Where(r => vigencia <= 0 || r.IdVigencia == vigencia)
+            .Select(r => new { r.IdRecurso, r.IdRecursoRel })
+            .ToListAsync();
+
+        var descendientes = new HashSet<int> { idRecurso };
+        bool agregado;
+        do
+        {
+            agregado = false;
+            foreach (var r in recursos)
+            {
+                if (r.IdRecursoRel.HasValue && descendientes.Contains(r.IdRecursoRel.Value) && descendientes.Add(r.IdRecurso))
+                {
+                    agregado = true;
+                }
+            }
+        } while (agregado);
+
+        return descendientes;
+    }
+
     /// <summary>
     /// Completa las filas con el codigo y el nombre de la cuenta y de la partida.
     /// Se resuelve en tres consultas por lote, no una por fila.
@@ -450,7 +685,7 @@ public class MatrizContableService(
         var cuentas = await _ejecucionContext.TCuentasContables
             .AsNoTracking()
             .Where(c => idsCuenta.Contains(c.IdCtaContable))
-            .Select(c => new { c.IdCtaContable, c.Codigo, c.Nombre })
+            .Select(c => new { c.IdCtaContable, c.Codigo, c.Nombre, c.Activa })
             .ToDictionaryAsync(c => c.IdCtaContable);
 
         var objetos = await _presupuestoContext.TObjetosGasto
@@ -481,12 +716,15 @@ public class MatrizContableService(
                 var tipo = ReglasMatrizContable.TipoDe(
                     new DatosMatriz(f.IdCtaContable, f.IdObjetoGasto, f.IdRecurso, f.IdVigencia));
 
+                var estaActiva = cuenta != null ? cuenta.Activa == ReglasJerarquiaCuentas.CuentaActiva : true;
+
                 return new MatrizContableResponse
                 {
                     IdMatrizCble = f.IdMatrizCble,
                     IdCtaContable = f.IdCtaContable,
                     CodigoCuenta = cuenta?.Codigo,
                     NombreCuenta = cuenta?.Nombre,
+                    Activa = estaActiva,
                     IdObjetoGasto = f.IdObjetoGasto,
                     NumeroObjeto = objeto?.NumeroObjeto,
                     NombreObjeto = objeto?.NombreObjeto,

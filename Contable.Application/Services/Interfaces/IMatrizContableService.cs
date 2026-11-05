@@ -19,6 +19,12 @@ public interface IMatrizContableService
 
     Task<OperationResponse<List<PartidaResponse>>> BuscarRecursos(FiltroPartidaRequest filtro);
 
+    Task<OperationResponse<List<PartidaArbolResponse>>> GetArbolObjetosGasto(int? idVigencia);
+
+    Task<OperationResponse<List<PartidaArbolResponse>>> GetArbolRecursos(int? idVigencia);
+
+    Task<OperationResponse<PendientesMatrizResponse>> GetPendientes(int? idVigencia);
+
     /// <summary>Vista previa de la importacion: no escribe nada.</summary>
     Task<OperationResponse<PlanImportacionResponse>> PlanificarImportacion(int ejercicioDestino);
 

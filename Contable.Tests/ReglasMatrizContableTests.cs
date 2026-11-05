@@ -145,4 +145,84 @@ public class ReglasMatrizContableTests
         validacion.Errores.Should().Contain(e => e.Contains("cuenta contable"));
         validacion.Errores.Should().Contain(e => e.Contains("ejercicio"));
     }
+
+    [Fact]
+    public void MatrizContableResponse_ExponeEstadoYActiva()
+    {
+        var activa = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse { Activa = true };
+        activa.Estado.Should().Be("Activa");
+
+        var inactiva = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse { Activa = false };
+        inactiva.Estado.Should().Be("Inactiva");
+    }
+
+    [Fact]
+    public void PendientesMatrizResponse_CalculaHayPendientesCorrectamente()
+    {
+        var sinPendientes = new Contable.Application.ResponseDto.Dtos.MatrizContable.PendientesMatrizResponse
+        {
+            GastosSinRelacionar = 0,
+            RecursosSinRelacionar = 0
+        };
+        sinPendientes.HayPendientes.Should().BeFalse();
+        sinPendientes.TotalPendientes.Should().Be(0);
+
+        var conPendientes = new Contable.Application.ResponseDto.Dtos.MatrizContable.PendientesMatrizResponse
+        {
+            GastosSinRelacionar = 5,
+            RecursosSinRelacionar = 2
+        };
+        conPendientes.HayPendientes.Should().BeTrue();
+        conPendientes.TotalPendientes.Should().Be(7);
+    }
+
+    [Fact]
+    public void PartidaArbolResponse_ConstruyeJerarquia()
+    {
+        var raiz = new Contable.Application.ResponseDto.Dtos.MatrizContable.PartidaArbolResponse
+        {
+            Id = 1,
+            Numero = 2000000,
+            Nombre = "Bienes de Consumo",
+            EsHoja = false
+        };
+        var hijo = new Contable.Application.ResponseDto.Dtos.MatrizContable.PartidaArbolResponse
+        {
+            Id = 2,
+            IdPadre = 1,
+            Numero = 2070400,
+            Nombre = "Repuestos y accesorios",
+            EsHoja = true
+        };
+        raiz.Hijas.Add(hijo);
+
+        raiz.Hijas.Should().ContainSingle();
+        raiz.Hijas[0].Codigo.Should().Be("2070400");
+        raiz.Hijas[0].EsHoja.Should().BeTrue();
+    }
+
+    [Fact]
+    public void OrdenamientoMatriz_OrdenaPorCuentaTipoYPartida()
+    {
+        var lista = new List<Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse>
+        {
+            new() { CodigoCuenta = "05.01", NombreCuenta = "Repuestos", TipoPartida = "Gasto", NumeroObjeto = 2070400 },
+            new() { CodigoCuenta = "01.01", NombreCuenta = "Caja", TipoPartida = "Gasto", NumeroObjeto = 3140100 },
+            new() { CodigoCuenta = "01.01", NombreCuenta = "Caja", TipoPartida = "Gasto", NumeroObjeto = 1010000 },
+            new() { CodigoCuenta = "04.01", NombreCuenta = "Ventas", TipoPartida = "Recurso", NumeroRecurso = 101021000 },
+        };
+
+        var ordenadas = lista
+            .OrderBy(f => f.CodigoCuenta, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.NombreCuenta, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.TipoPartida, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.NumeroObjeto?.ToString() ?? f.NumeroRecurso?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        ordenadas[0].CodigoCuenta.Should().Be("01.01");
+        ordenadas[0].NumeroObjeto.Should().Be(1010000);
+        ordenadas[1].NumeroObjeto.Should().Be(3140100);
+        ordenadas[2].CodigoCuenta.Should().Be("04.01");
+        ordenadas[3].CodigoCuenta.Should().Be("05.01");
+    }
 }

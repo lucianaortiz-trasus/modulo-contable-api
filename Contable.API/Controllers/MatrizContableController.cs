@@ -51,6 +51,24 @@ public class MatrizContableController(IMatrizContableService servicio) : BaseCon
     public async Task<IActionResult> BuscarRecursos([FromBody] FiltroPartidaRequest filtro)
         => Return(await _servicio.BuscarRecursos(filtro));
 
+    /// <summary>Árbol completo de objetos de gasto para el selector jerárquico.</summary>
+    [HttpGet("ArbolObjetosGasto")]
+    [ProducesResponseType(typeof(OperationResponse<List<PartidaArbolResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetArbolObjetosGasto([FromQuery] int? idVigencia)
+        => Return(await _servicio.GetArbolObjetosGasto(idVigencia));
+
+    /// <summary>Árbol completo de recursos para el selector jerárquico.</summary>
+    [HttpGet("ArbolRecursos")]
+    [ProducesResponseType(typeof(OperationResponse<List<PartidaArbolResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetArbolRecursos([FromQuery] int? idVigencia)
+        => Return(await _servicio.GetArbolRecursos(idVigencia));
+
+    /// <summary>Verifica si existen objetos de gasto o recursos sin relacionar en la matriz.</summary>
+    [HttpGet("Pendientes")]
+    [ProducesResponseType(typeof(OperationResponse<PendientesMatrizResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPendientes([FromQuery] int? idVigencia)
+        => Return(await _servicio.GetPendientes(idVigencia));
+
     /// <summary>
     /// Vista previa del traslado de la matriz desde el ejercicio anterior. No escribe nada:
     /// permite ver que se va a importar y que no se puede trasladar antes de confirmar.
