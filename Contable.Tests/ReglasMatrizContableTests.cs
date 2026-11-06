@@ -225,4 +225,44 @@ public class ReglasMatrizContableTests
         ordenadas[2].CodigoCuenta.Should().Be("04.01");
         ordenadas[3].CodigoCuenta.Should().Be("05.01");
     }
+
+    [Fact]
+    public void PartidaArbolResponse_IndicaSiYaPoseeRelacionActiva()
+    {
+        var partida = new Contable.Application.ResponseDto.Dtos.MatrizContable.PartidaArbolResponse
+        {
+            Id = 10,
+            Numero = 2070400,
+            Nombre = "Repuestos",
+            EsHoja = true,
+            YaRelacionada = true
+        };
+
+        partida.YaRelacionada.Should().BeTrue();
+        partida.EsHoja.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidarAlta_RechazaCuentaNoImputableOInactiva()
+    {
+        var contextoNoImputable = ContextoSano() with { CuentaEsImputable = false };
+        var validacionNoImputable = ReglasMatrizContable.ValidarAlta(Gasto(), contextoNoImputable);
+        validacionNoImputable.EsValida.Should().BeFalse();
+        validacionNoImputable.Errores.Should().Contain(e => e.Contains("no es imputable"));
+
+        var contextoInactiva = ContextoSano() with { CuentaEstaActiva = false };
+        var validacionInactiva = ReglasMatrizContable.ValidarAlta(Gasto(), contextoInactiva);
+        validacionInactiva.EsValida.Should().BeFalse();
+        validacionInactiva.Errores.Should().Contain(e => e.Contains("dada de baja"));
+    }
+
+    [Fact]
+    public void ValidarAlta_RechazaPartidaYaRelacionadaEnLaMatriz()
+    {
+        var contextoDuplicada = ContextoSano(partidaYaAsignadaA: "01.01.01.01");
+        var validacion = ReglasMatrizContable.ValidarAlta(Gasto(), contextoDuplicada);
+
+        validacion.EsValida.Should().BeFalse();
+        validacion.Errores.Should().Contain(e => e.Contains("ya esta relacionada con la cuenta 01.01.01.01"));
+    }
 }

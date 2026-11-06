@@ -105,6 +105,9 @@ public class PartidaArbolResponse
 
     public bool EsHoja { get; set; }
 
+    /// <summary>Indica si la partida ya posee una relación activa en la matriz contable para este ejercicio.</summary>
+    public bool YaRelacionada { get; set; }
+
     public List<PartidaArbolResponse> Hijas { get; set; } = [];
 }
 

@@ -31,7 +31,7 @@ public class MatrizContableService(
 
         var consulta = _ejecucionContext.TMatrizContable.AsNoTracking();
 
-        var vigencia = filtro.IdVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(filtro.IdVigencia);
         if (vigencia > 0) consulta = consulta.Where(m => m.IdVigencia == vigencia);
 
         if (filtro.IdCtaContable is > 0)
@@ -101,7 +101,7 @@ public class MatrizContableService(
 
     public async Task<OperationResponse<MatrizContableResponse>> Crear(MatrizContableRequest request)
     {
-        var vigencia = request.IdVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(request.IdVigencia);
         var datos = new DatosMatriz(request.IdCtaContable, request.IdObjetoGasto, request.IdRecurso, vigencia);
 
         var contexto = await ArmarContexto(datos, idMatrizAExcluir: null);
@@ -134,7 +134,7 @@ public class MatrizContableService(
 
         if (fila is null) return NotFound<MatrizContableResponse>("La relacion no existe.");
 
-        var vigencia = request.IdVigencia ?? fila.IdVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(request.IdVigencia ?? fila.IdVigencia);
         var datos = new DatosMatriz(request.IdCtaContable, request.IdObjetoGasto, request.IdRecurso, vigencia);
 
         var contexto = await ArmarContexto(datos, idMatrizAExcluir: idMatrizCble);
@@ -170,7 +170,7 @@ public class MatrizContableService(
 
     public async Task<OperationResponse<List<PartidaResponse>>> BuscarObjetosGasto(FiltroPartidaRequest filtro)
     {
-        var vigencia = filtro.IdVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(filtro.IdVigencia);
         var consulta = _presupuestoContext.TObjetosGasto.AsNoTracking();
 
         if (vigencia > 0) consulta = consulta.Where(o => o.IdVigencia == vigencia);
@@ -203,7 +203,7 @@ public class MatrizContableService(
 
     public async Task<OperationResponse<List<PartidaResponse>>> BuscarRecursos(FiltroPartidaRequest filtro)
     {
-        var vigencia = filtro.IdVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(filtro.IdVigencia);
         var consulta = _presupuestoContext.TRecursos.AsNoTracking();
 
         if (vigencia > 0) consulta = consulta.Where(r => r.IdVigencia == vigencia);
@@ -467,13 +467,20 @@ public class MatrizContableService(
 
     public async Task<OperationResponse<List<PartidaArbolResponse>>> GetArbolObjetosGasto(int? idVigencia)
     {
-        var vigencia = idVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(idVigencia);
         var consulta = _presupuestoContext.TObjetosGasto.AsNoTracking();
         if (vigencia > 0) consulta = consulta.Where(o => o.IdVigencia == vigencia);
 
         var lista = await consulta
             .OrderBy(o => o.NumeroObjeto)
             .ToListAsync();
+
+        var objetosRelacionados = (await _ejecucionContext.TMatrizContable
+            .AsNoTracking()
+            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdObjetoGasto != null)
+            .Select(m => m.IdObjetoGasto!.Value)
+            .ToListAsync())
+            .ToHashSet();
 
         var nodos = lista.ToDictionary(
             o => o.IdObjetoGasto,
@@ -483,7 +490,8 @@ public class MatrizContableService(
                 IdPadre = o.IdObjetoGastoRel,
                 Numero = o.NumeroObjeto,
                 Nombre = o.NombreObjeto,
-                EsHoja = o.EsUltimoNivel
+                EsHoja = o.EsUltimoNivel,
+                YaRelacionada = objetosRelacionados.Contains(o.IdObjetoGasto)
             });
 
         var raices = new List<PartidaArbolResponse>();
@@ -510,13 +518,20 @@ public class MatrizContableService(
 
     public async Task<OperationResponse<List<PartidaArbolResponse>>> GetArbolRecursos(int? idVigencia)
     {
-        var vigencia = idVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(idVigencia);
         var consulta = _presupuestoContext.TRecursos.AsNoTracking();
         if (vigencia > 0) consulta = consulta.Where(r => r.IdVigencia == vigencia);
 
         var lista = await consulta
             .OrderBy(r => r.NumeroRecurso)
             .ToListAsync();
+
+        var recursosRelacionados = (await _ejecucionContext.TMatrizContable
+            .AsNoTracking()
+            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdRecurso != null)
+            .Select(m => m.IdRecurso!.Value)
+            .ToListAsync())
+            .ToHashSet();
 
         var nodos = lista.ToDictionary(
             r => r.IdRecurso,
@@ -526,7 +541,8 @@ public class MatrizContableService(
                 IdPadre = r.IdRecursoRel,
                 Numero = r.NumeroRecurso,
                 Nombre = r.NombreRecurso,
-                EsHoja = false
+                EsHoja = false,
+                YaRelacionada = recursosRelacionados.Contains(r.IdRecurso)
             });
 
         var raices = new List<PartidaArbolResponse>();
@@ -553,7 +569,7 @@ public class MatrizContableService(
 
     public async Task<OperationResponse<PendientesMatrizResponse>> GetPendientes(int? idVigencia)
     {
-        var vigencia = idVigencia ?? GetIdVigencia();
+        var vigencia = await ResolverVigencia(idVigencia);
 
         var objetosConCuenta = await _ejecucionContext.TMatrizContable
             .AsNoTracking()
@@ -741,5 +757,20 @@ public class MatrizContableService(
                 };
             })
         ];
+    }
+
+    private async Task<int> ResolverVigencia(int? idVigencia)
+    {
+        if (idVigencia is > 0) return idVigencia.Value;
+        var claim = GetIdVigencia();
+        if (claim > 0) return claim;
+
+        var activa = await _presupuestoContext.TVigencias
+            .AsNoTracking()
+            .Where(v => v.ActivoEjecucion == "S")
+            .Select(v => v.IdVigencia)
+            .FirstOrDefaultAsync();
+
+        return activa;
     }
 }
