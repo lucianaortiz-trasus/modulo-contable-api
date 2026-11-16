@@ -34,10 +34,23 @@ public class MatrizContableController(IMatrizContableService servicio) : BaseCon
     public async Task<IActionResult> Editar(int idMatrizCble, [FromBody] MatrizContableRequest request)
         => Return(await _servicio.Editar(idMatrizCble, request));
 
+    /// <summary>Verifica si una cuenta contable tiene asientos registrados.</summary>
+    [HttpGet("CuentaTieneAsientos/{idCtaContable:int}")]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CuentaTieneAsientos(int idCtaContable)
+        => Return(await _servicio.CuentaTieneAsientos(idCtaContable));
+
     [HttpDelete("{idMatrizCble:int}")]
     [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Eliminar(int idMatrizCble)
         => Return(await _servicio.Eliminar(idMatrizCble));
+
+    /// <summary>Desactiva la relación de la matriz contable (marca la cuenta como inactiva).</summary>
+    [HttpPatch("{idMatrizCble:int}/desactivar")]
+    [HttpPut("{idMatrizCble:int}/desactivar")]
+    [ProducesResponseType(typeof(OperationResponse<MatrizContableResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Desactivar(int idMatrizCble)
+        => Return(await _servicio.Desactivar(idMatrizCble));
 
     /// <summary>Objetos de gasto para el selector de partidas.</summary>
     [HttpPost("ObjetosGasto")]

@@ -162,10 +162,52 @@ public class MatrizContableService(
 
         if (fila is null) return NotFound<bool>("La relacion no existe.");
 
+        if (fila.IdCtaContable.HasValue)
+        {
+            var tieneAsientos = await _ejecucionContext.TAsientosDetalle
+                .AsNoTracking()
+                .AnyAsync(d => d.IdCtaContable == fila.IdCtaContable.Value);
+
+            var validacion = ReglasMatrizContable.ValidarEliminacion(tieneAsientos);
+            if (!validacion.EsValida)
+            {
+                return BadRequest<bool>(validacion.Mensaje);
+            }
+        }
+
         _ejecucionContext.TMatrizContable.Remove(fila);
         await _ejecucionContext.SaveChangesAsync();
 
         return Ok(true);
+    }
+
+    public async Task<OperationResponse<MatrizContableResponse>> Desactivar(int idMatrizCble)
+    {
+        var fila = await _ejecucionContext.TMatrizContable
+            .FirstOrDefaultAsync(m => m.IdMatrizCble == idMatrizCble);
+
+        if (fila is null) return NotFound<MatrizContableResponse>("La relacion no existe.");
+
+        if (fila.IdCtaContable.HasValue)
+        {
+            var cuenta = await _ejecucionContext.TCuentasContables
+                .FirstOrDefaultAsync(c => c.IdCtaContable == fila.IdCtaContable.Value);
+
+            if (cuenta is not null)
+            {
+                cuenta.Activa = ReglasJerarquiaCuentas.CuentaInactiva;
+                cuenta.UserAct = GetUserCache();
+                cuenta.FecAct = DateTime.Now;
+            }
+        }
+
+        fila.UserAct = GetUserCache();
+        fila.FecAct = DateTime.Now;
+
+        await _ejecucionContext.SaveChangesAsync();
+
+        var enriquecidas = await Enriquecer([fila]);
+        return Ok(enriquecidas[0]);
     }
 
     public async Task<OperationResponse<List<PartidaResponse>>> BuscarObjetosGasto(FiltroPartidaRequest filtro)

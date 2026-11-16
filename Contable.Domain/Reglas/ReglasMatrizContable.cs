@@ -89,6 +89,23 @@ public static class ReglasMatrizContable
             contexto.RelacionYaCargada,
             "Ya existe otra fila con esa misma cuenta, partida y ejercicio.");
 
+        validacion.AgregarSi(
+            contexto.PartidaYaAsignadaA is not null,
+            $"La partida ya esta relacionada con la cuenta {contexto.PartidaYaAsignadaA} en este ejercicio.");
+
+        return validacion;
+    }
+
+    /// <summary>
+    /// Valida si una relación de la matriz contable puede eliminarse físicamente.
+    /// Si la cuenta posee asientos contables registrados, la eliminación física no está permitida (debe desactivarse).
+    /// </summary>
+    public static Validacion ValidarEliminacion(bool tieneAsientos)
+    {
+        var validacion = new Validacion();
+        validacion.AgregarSi(
+            tieneAsientos,
+            "No se puede eliminar físicamente la relación porque la cuenta contable posee asientos registrados. Debe ser desactivada.");
         return validacion;
     }
 

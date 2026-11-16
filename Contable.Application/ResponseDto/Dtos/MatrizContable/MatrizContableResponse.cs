@@ -30,6 +30,12 @@ public class MatrizContableResponse
 
     public string Estado => Activa ? "Activa" : "Inactiva";
 
+    /// <summary>Indica si la cuenta contable tiene asientos registrados.</summary>
+    public bool TieneAsientos { get; set; }
+
+    /// <summary>La edición solo está disponible si la cuenta no tiene asientos contables registrados.</summary>
+    public bool PermiteEditar => !TieneAsientos;
+
     public int? IdVigencia { get; set; }
 
     public int? Ejercicio { get; set; }

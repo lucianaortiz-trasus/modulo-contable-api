@@ -265,4 +265,54 @@ public class ReglasMatrizContableTests
         validacion.EsValida.Should().BeFalse();
         validacion.Errores.Should().Contain(e => e.Contains("ya esta relacionada con la cuenta 01.01.01.01"));
     }
+
+    [Fact]
+    public void ValidarEdicion_AceptaModificacionValida()
+    {
+        var validacion = ReglasMatrizContable.ValidarEdicion(Gasto(), ContextoSano());
+        validacion.EsValida.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidarEdicion_RechazaPartidaAsignadaAOtraCuenta()
+    {
+        var contextoDuplicada = ContextoSano(partidaYaAsignadaA: "01.01.01.02");
+        var validacion = ReglasMatrizContable.ValidarEdicion(Gasto(), contextoDuplicada);
+
+        validacion.EsValida.Should().BeFalse();
+        validacion.Errores.Should().Contain(e => e.Contains("ya esta relacionada con la cuenta 01.01.01.02"));
+    }
+
+    [Fact]
+    public void MatrizContableResponse_PermiteEditar_DependeDeAsientos()
+    {
+        var responseSinAsientos = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse
+        {
+            IdMatrizCble = 1,
+            TieneAsientos = false
+        };
+        responseSinAsientos.PermiteEditar.Should().BeTrue();
+
+        var responseConAsientos = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse
+        {
+            IdMatrizCble = 2,
+            TieneAsientos = true
+        };
+        responseConAsientos.PermiteEditar.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ValidarEliminacion_PermiteEliminar_SiNoTieneAsientos()
+    {
+        var validacion = ReglasMatrizContable.ValidarEliminacion(tieneAsientos: false);
+        validacion.EsValida.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidarEliminacion_RechazaEliminacion_SiTieneAsientos()
+    {
+        var validacion = ReglasMatrizContable.ValidarEliminacion(tieneAsientos: true);
+        validacion.EsValida.Should().BeFalse();
+        validacion.Errores.Should().Contain(e => e.Contains("posee asientos registrados"));
+    }
 }
