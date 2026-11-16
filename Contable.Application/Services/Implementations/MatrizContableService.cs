@@ -134,6 +134,12 @@ public class MatrizContableService(
 
         if (fila is null) return NotFound<MatrizContableResponse>("La relacion no existe.");
 
+        if (fila.IdCtaContable.HasValue && await TieneAsientosCuenta(fila.IdCtaContable.Value))
+        {
+            return BadRequest<MatrizContableResponse>(
+                "No se puede modificar la relación porque la cuenta contable posee asientos registrados.");
+        }
+
         var vigencia = await ResolverVigencia(request.IdVigencia ?? fila.IdVigencia);
         var datos = new DatosMatriz(request.IdCtaContable, request.IdObjetoGasto, request.IdRecurso, vigencia);
 
@@ -157,10 +163,7 @@ public class MatrizContableService(
 
     public async Task<OperationResponse<bool>> CuentaTieneAsientos(int idCtaContable)
     {
-        var tieneAsientos = await _ejecucionContext.TAsientosDetalle
-            .AsNoTracking()
-            .AnyAsync(d => d.IdCtaContable == idCtaContable);
-
+        var tieneAsientos = await TieneAsientosCuenta(idCtaContable);
         return Ok(tieneAsientos);
     }
 
@@ -173,9 +176,7 @@ public class MatrizContableService(
 
         if (fila.IdCtaContable.HasValue)
         {
-            var tieneAsientos = await _ejecucionContext.TAsientosDetalle
-                .AsNoTracking()
-                .AnyAsync(d => d.IdCtaContable == fila.IdCtaContable.Value);
+            var tieneAsientos = await TieneAsientosCuenta(fila.IdCtaContable.Value);
 
             var validacion = ReglasMatrizContable.ValidarEliminacion(tieneAsientos);
             if (!validacion.EsValida)
@@ -636,11 +637,16 @@ public class MatrizContableService(
             .Distinct()
             .ToListAsync();
 
-        var sinRelacionarGastos = await _presupuestoContext.TObjetosGasto
+        var consultaGastos = _presupuestoContext.TObjetosGasto
             .AsNoTracking()
-            .Where(o => (vigencia <= 0 || o.IdVigencia == vigencia) && o.UltimoNivel == "S")
-            .Where(o => !objetosConCuenta.Contains(o.IdObjetoGasto))
-            .CountAsync();
+            .Where(o => (vigencia <= 0 || o.IdVigencia == vigencia) && o.UltimoNivel == "S");
+
+        if (objetosConCuenta.Count > 0)
+        {
+            consultaGastos = consultaGastos.Where(o => !objetosConCuenta.Contains(o.IdObjetoGasto));
+        }
+
+        var sinRelacionarGastos = await consultaGastos.CountAsync();
 
         var idsRecursosPadre = await _presupuestoContext.TRecursos
             .AsNoTracking()
@@ -649,12 +655,21 @@ public class MatrizContableService(
             .Distinct()
             .ToListAsync();
 
-        var sinRelacionarRecursos = await _presupuestoContext.TRecursos
+        var consultaRecursos = _presupuestoContext.TRecursos
             .AsNoTracking()
-            .Where(r => (vigencia <= 0 || r.IdVigencia == vigencia))
-            .Where(r => !idsRecursosPadre.Contains(r.IdRecurso))
-            .Where(r => !recursosConCuenta.Contains(r.IdRecurso))
-            .CountAsync();
+            .Where(r => vigencia <= 0 || r.IdVigencia == vigencia);
+
+        if (idsRecursosPadre.Count > 0)
+        {
+            consultaRecursos = consultaRecursos.Where(r => !idsRecursosPadre.Contains(r.IdRecurso));
+        }
+
+        if (recursosConCuenta.Count > 0)
+        {
+            consultaRecursos = consultaRecursos.Where(r => !recursosConCuenta.Contains(r.IdRecurso));
+        }
+
+        var sinRelacionarRecursos = await consultaRecursos.CountAsync();
 
         return Ok(new PendientesMatrizResponse
         {
@@ -740,45 +755,57 @@ public class MatrizContableService(
 
     /// <summary>
     /// Completa las filas con el codigo y el nombre de la cuenta y de la partida.
-    /// Se resuelve en tres consultas por lote, no una por fila.
+    /// Se resuelve en consultas por lote, no una por fila.
     /// </summary>
     private async Task<List<MatrizContableResponse>> Enriquecer(List<TMatrizContable> filas)
     {
+        if (filas.Count == 0) return [];
+
         var idsCuenta = filas.Where(f => f.IdCtaContable is not null).Select(f => f.IdCtaContable!.Value).Distinct().ToList();
         var idsObjeto = filas.Where(f => f.IdObjetoGasto is not null).Select(f => f.IdObjetoGasto!.Value).Distinct().ToList();
         var idsRecurso = filas.Where(f => f.IdRecurso is not null).Select(f => f.IdRecurso!.Value).Distinct().ToList();
         var idsVigencia = filas.Where(f => f.IdVigencia is not null).Select(f => f.IdVigencia!.Value).Distinct().ToList();
 
-        var cuentas = await _ejecucionContext.TCuentasContables
-            .AsNoTracking()
-            .Where(c => idsCuenta.Contains(c.IdCtaContable))
-            .Select(c => new { c.IdCtaContable, c.Codigo, c.Nombre, c.Activa })
-            .ToDictionaryAsync(c => c.IdCtaContable);
+        var cuentas = idsCuenta.Count > 0
+            ? await _ejecucionContext.TCuentasContables
+                .AsNoTracking()
+                .Where(c => idsCuenta.Contains(c.IdCtaContable))
+                .Select(c => new { c.IdCtaContable, c.Codigo, c.Nombre, c.Activa })
+                .ToDictionaryAsync(c => c.IdCtaContable)
+            : [];
 
-        var objetos = await _presupuestoContext.TObjetosGasto
-            .AsNoTracking()
-            .Where(o => idsObjeto.Contains(o.IdObjetoGasto))
-            .Select(o => new { o.IdObjetoGasto, o.NumeroObjeto, o.NombreObjeto })
-            .ToDictionaryAsync(o => o.IdObjetoGasto);
+        var objetos = idsObjeto.Count > 0
+            ? await _presupuestoContext.TObjetosGasto
+                .AsNoTracking()
+                .Where(o => idsObjeto.Contains(o.IdObjetoGasto))
+                .Select(o => new { o.IdObjetoGasto, o.NumeroObjeto, o.NombreObjeto })
+                .ToDictionaryAsync(o => o.IdObjetoGasto)
+            : [];
 
-        var recursos = await _presupuestoContext.TRecursos
-            .AsNoTracking()
-            .Where(r => idsRecurso.Contains(r.IdRecurso))
-            .Select(r => new { r.IdRecurso, r.NumeroRecurso, r.NombreRecurso })
-            .ToDictionaryAsync(r => r.IdRecurso);
+        var recursos = idsRecurso.Count > 0
+            ? await _presupuestoContext.TRecursos
+                .AsNoTracking()
+                .Where(r => idsRecurso.Contains(r.IdRecurso))
+                .Select(r => new { r.IdRecurso, r.NumeroRecurso, r.NombreRecurso })
+                .ToDictionaryAsync(r => r.IdRecurso)
+            : [];
 
-        var ejercicios = await _presupuestoContext.TVigencias
-            .AsNoTracking()
-            .Where(v => idsVigencia.Contains(v.IdVigencia))
-            .ToDictionaryAsync(v => v.IdVigencia, v => v.Ejercicio);
+        var ejercicios = idsVigencia.Count > 0
+            ? await _presupuestoContext.TVigencias
+                .AsNoTracking()
+                .Where(v => idsVigencia.Contains(v.IdVigencia))
+                .ToDictionaryAsync(v => v.IdVigencia, v => v.Ejercicio)
+            : [];
 
-        var cuentasConAsientos = (await _ejecucionContext.TAsientosDetalle
-            .AsNoTracking()
-            .Where(d => idsCuenta.Contains(d.IdCtaContable))
-            .Select(d => d.IdCtaContable)
-            .Distinct()
-            .ToListAsync())
-            .ToHashSet();
+        var cuentasConAsientos = idsCuenta.Count > 0
+            ? (await _ejecucionContext.TAsientosDetalle
+                .AsNoTracking()
+                .Where(d => idsCuenta.Contains(d.IdCtaContable))
+                .Select(d => d.IdCtaContable)
+                .Distinct()
+                .ToListAsync())
+                .ToHashSet()
+            : [];
 
         return
         [
@@ -819,6 +846,18 @@ public class MatrizContableService(
             })
         ];
     }
+
+    /// <summary>
+    /// Verifica si existen renglones de asiento para la cuenta.
+    /// No se usa AnyAsync porque el proveedor de Oracle lo traduce al literal booleano FALSE,
+    /// que Oracle 12.2 rechaza con ORA-00904. Take(1) + CountAsync corta en la primera fila.
+    /// </summary>
+    private async Task<bool> TieneAsientosCuenta(int idCtaContable)
+        => await _ejecucionContext.TAsientosDetalle
+            .AsNoTracking()
+            .Where(d => d.IdCtaContable == idCtaContable)
+            .Take(1)
+            .CountAsync() > 0;
 
     private async Task<int> ResolverVigencia(int? idVigencia)
     {
