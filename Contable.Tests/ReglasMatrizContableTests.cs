@@ -315,4 +315,48 @@ public class ReglasMatrizContableTests
         validacion.EsValida.Should().BeFalse();
         validacion.Errores.Should().Contain(e => e.Contains("posee asientos registrados"));
     }
+
+    [Fact]
+    public void ExportacionMatrizResponse_MantieneSeccionMatrizYRelacionesPendientes()
+    {
+        var exportacion = new Contable.Application.ResponseDto.Dtos.MatrizContable.ExportacionMatrizResponse
+        {
+            Ejercicio = 2026,
+            Usuario = "Rojas, Ricardo",
+            MatrizContable =
+            [
+                new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse
+                {
+                    IdMatrizCble = 1,
+                    CodigoCuenta = "01.01.01.01",
+                    NombreCuenta = "Caja en pesos",
+                    TipoPartida = "Gasto",
+                    NumeroObjeto = 3140100,
+                    NombreObjeto = "honorarios personal contratado",
+                    Activa = true,
+                }
+            ],
+            RelacionesPendientes =
+            [
+                new Contable.Application.ResponseDto.Dtos.MatrizContable.RelacionPendienteResponse
+                {
+                    Id = 10,
+                    Tipo = "Gasto",
+                    Numero = 1010101,
+                    Nombre = "intendente",
+                },
+                new Contable.Application.ResponseDto.Dtos.MatrizContable.RelacionPendienteResponse
+                {
+                    Id = 20,
+                    Tipo = "Recurso",
+                    Numero = 1010301,
+                    Nombre = "Tasa S/ Automotores Del Ejercicio",
+                }
+            ]
+        };
+
+        exportacion.MatrizContable.Should().HaveCount(1);
+        exportacion.MatrizContable[0].Estado.Should().Be("Activa");
+        exportacion.RelacionesPendientes.Should().HaveCount(2);
+    }
 }

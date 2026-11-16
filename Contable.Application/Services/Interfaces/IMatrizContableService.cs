@@ -25,6 +25,8 @@ public interface IMatrizContableService
 
     Task<OperationResponse<PendientesMatrizResponse>> GetPendientes(int? idVigencia);
 
+    Task<OperationResponse<ExportacionMatrizResponse>> Exportar(FiltroMatrizRequest filtro);
+
     Task<OperationResponse<bool>> CuentaTieneAsientos(int idCtaContable);
 
     Task<OperationResponse<MatrizContableResponse>> Desactivar(int idMatrizCble);

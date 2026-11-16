@@ -82,6 +82,18 @@ public class MatrizContableController(IMatrizContableService servicio) : BaseCon
     public async Task<IActionResult> GetPendientes([FromQuery] int? idVigencia)
         => Return(await _servicio.GetPendientes(idVigencia));
 
+    /// <summary>Obtiene los datos completos para exportar la Matriz Contable (filtrada) y las Relaciones Pendientes.</summary>
+    [HttpPost("Exportar")]
+    [ProducesResponseType(typeof(OperationResponse<ExportacionMatrizResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Exportar([FromBody] FiltroMatrizRequest filtro)
+        => Return(await _servicio.Exportar(filtro));
+
+    /// <summary>Obtiene los datos completos para exportar la Matriz Contable (filtrada) y las Relaciones Pendientes vía query string.</summary>
+    [HttpGet("Exportar")]
+    [ProducesResponseType(typeof(OperationResponse<ExportacionMatrizResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ExportarGet([FromQuery] FiltroMatrizRequest filtro)
+        => Return(await _servicio.Exportar(filtro));
+
     /// <summary>
     /// Vista previa del traslado de la matriz desde el ejercicio anterior. No escribe nada:
     /// permite ver que se va a importar y que no se puede trasladar antes de confirmar.

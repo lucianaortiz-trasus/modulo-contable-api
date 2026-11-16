@@ -29,6 +29,47 @@ public class MatrizContableService(
         var pagina = filtro.Pagina < 1 ? 1 : filtro.Pagina;
         var tamano = filtro.TamanoPagina is < 1 or > 200 ? 20 : filtro.TamanoPagina;
 
+        var (ordenadas, _) = await ObtenerFilasFiltradas(filtro);
+
+        var total = ordenadas.Count;
+        var paged = ordenadas
+            .Skip((pagina - 1) * tamano)
+            .Take(tamano)
+            .ToList();
+
+        return Paginado(paged, total);
+    }
+
+    public async Task<OperationResponse<ExportacionMatrizResponse>> Exportar(FiltroMatrizRequest filtro)
+    {
+        var (ordenadas, vigencia) = await ObtenerFilasFiltradas(filtro);
+        var pendientes = await ObtenerRelacionesPendientes(vigencia);
+
+        var ejercicio = ordenadas.FirstOrDefault()?.Ejercicio;
+        if (ejercicio is null && vigencia > 0)
+        {
+            ejercicio = await _presupuestoContext.TVigencias
+                .AsNoTracking()
+                .Where(v => v.IdVigencia == vigencia)
+                .Select(v => (int?)v.Ejercicio)
+                .FirstOrDefaultAsync();
+        }
+
+        var apellidoYNombre = _httpContextAccessor.HttpContext?.User?.Claims
+            .FirstOrDefault(x => x.Type == "ApellidoYNombre")?.Value;
+        var usuario = !string.IsNullOrWhiteSpace(apellidoYNombre) ? apellidoYNombre : GetUserCache();
+
+        return Ok(new ExportacionMatrizResponse
+        {
+            Ejercicio = ejercicio,
+            Usuario = usuario,
+            MatrizContable = ordenadas,
+            RelacionesPendientes = pendientes.RelacionesPendientes,
+        });
+    }
+
+    private async Task<(List<MatrizContableResponse> Filas, int Vigencia)> ObtenerFilasFiltradas(FiltroMatrizRequest filtro)
+    {
         var consulta = _ejecucionContext.TMatrizContable.AsNoTracking();
 
         var vigencia = await ResolverVigencia(filtro.IdVigencia);
@@ -37,19 +78,28 @@ public class MatrizContableService(
         if (filtro.IdCtaContable is > 0)
         {
             var idsCuentas = await ObtenerDescendientesCuenta(filtro.IdCtaContable.Value, vigencia);
-            consulta = consulta.Where(m => m.IdCtaContable != null && idsCuentas.Contains(m.IdCtaContable.Value));
+            if (idsCuentas.Count > 0)
+            {
+                consulta = consulta.Where(m => m.IdCtaContable != null && idsCuentas.Contains(m.IdCtaContable.Value));
+            }
         }
 
         if (filtro.IdObjetoGasto is > 0)
         {
             var idsObjetos = await ObtenerDescendientesObjetoGasto(filtro.IdObjetoGasto.Value, vigencia);
-            consulta = consulta.Where(m => m.IdObjetoGasto != null && idsObjetos.Contains(m.IdObjetoGasto.Value));
+            if (idsObjetos.Count > 0)
+            {
+                consulta = consulta.Where(m => m.IdObjetoGasto != null && idsObjetos.Contains(m.IdObjetoGasto.Value));
+            }
         }
 
         if (filtro.IdRecurso is > 0)
         {
             var idsRecursos = await ObtenerDescendientesRecurso(filtro.IdRecurso.Value, vigencia);
-            consulta = consulta.Where(m => m.IdRecurso != null && idsRecursos.Contains(m.IdRecurso.Value));
+            if (idsRecursos.Count > 0)
+            {
+                consulta = consulta.Where(m => m.IdRecurso != null && idsRecursos.Contains(m.IdRecurso.Value));
+            }
         }
 
         if (string.Equals(filtro.TipoPartida, "Gasto", StringComparison.OrdinalIgnoreCase))
@@ -78,13 +128,7 @@ public class MatrizContableService(
             .ThenBy(f => f.NombreObjeto ?? f.NombreRecurso ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var total = ordenadas.Count;
-        var paged = ordenadas
-            .Skip((pagina - 1) * tamano)
-            .Take(tamano)
-            .ToList();
-
-        return Paginado(paged, total);
+        return (ordenadas, vigencia);
     }
 
     public async Task<OperationResponse<MatrizContableResponse>> GetPorId(int idMatrizCble)
@@ -527,12 +571,7 @@ public class MatrizContableService(
             .OrderBy(o => o.NumeroObjeto)
             .ToListAsync();
 
-        var objetosRelacionados = (await _ejecucionContext.TMatrizContable
-            .AsNoTracking()
-            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdObjetoGasto != null)
-            .Select(m => m.IdObjetoGasto!.Value)
-            .ToListAsync())
-            .ToHashSet();
+        var (objetosRelacionados, _) = await ObtenerPartidasConRelacionActiva(vigencia);
 
         var nodos = lista.ToDictionary(
             o => o.IdObjetoGasto,
@@ -578,12 +617,7 @@ public class MatrizContableService(
             .OrderBy(r => r.NumeroRecurso)
             .ToListAsync();
 
-        var recursosRelacionados = (await _ejecucionContext.TMatrizContable
-            .AsNoTracking()
-            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdRecurso != null)
-            .Select(m => m.IdRecurso!.Value)
-            .ToListAsync())
-            .ToHashSet();
+        var (_, recursosRelacionados) = await ObtenerPartidasConRelacionActiva(vigencia);
 
         var nodos = lista.ToDictionary(
             r => r.IdRecurso,
@@ -622,60 +656,86 @@ public class MatrizContableService(
     public async Task<OperationResponse<PendientesMatrizResponse>> GetPendientes(int? idVigencia)
     {
         var vigencia = await ResolverVigencia(idVigencia);
+        var pendientes = await ObtenerRelacionesPendientes(vigencia);
+        return Ok(pendientes);
+    }
 
-        var objetosConCuenta = await _ejecucionContext.TMatrizContable
+    private async Task<(HashSet<int> ObjetosActivos, HashSet<int> RecursosActivos)> ObtenerPartidasConRelacionActiva(int vigencia)
+    {
+        var relacionesActivas = await (
+            from m in _ejecucionContext.TMatrizContable.AsNoTracking()
+            join c in _ejecucionContext.TCuentasContables.AsNoTracking()
+                on m.IdCtaContable equals c.IdCtaContable into cuentasJoin
+            from c in cuentasJoin.DefaultIfEmpty()
+            where vigencia <= 0 || m.IdVigencia == vigencia
+            where c == null || c.Activa == ReglasJerarquiaCuentas.CuentaActiva
+            select new { m.IdObjetoGasto, m.IdRecurso }
+        ).ToListAsync();
+
+        var objetosActivos = relacionesActivas
+            .Where(r => r.IdObjetoGasto != null)
+            .Select(r => r.IdObjetoGasto!.Value)
+            .ToHashSet();
+
+        var recursosActivos = relacionesActivas
+            .Where(r => r.IdRecurso != null)
+            .Select(r => r.IdRecurso!.Value)
+            .ToHashSet();
+
+        return (objetosActivos, recursosActivos);
+    }
+
+    private async Task<PendientesMatrizResponse> ObtenerRelacionesPendientes(int vigencia)
+    {
+        var (objetosConCuentaActiva, recursosConCuentaActiva) = await ObtenerPartidasConRelacionActiva(vigencia);
+
+        var gastosUltimoNivel = await _presupuestoContext.TObjetosGasto
             .AsNoTracking()
-            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdObjetoGasto != null)
-            .Select(m => m.IdObjetoGasto!.Value)
-            .Distinct()
+            .Where(o => (vigencia <= 0 || o.IdVigencia == vigencia) && o.UltimoNivel == "S")
+            .OrderBy(o => o.NumeroObjeto)
+            .Select(o => new { o.IdObjetoGasto, o.NumeroObjeto, o.NombreObjeto })
             .ToListAsync();
 
-        var recursosConCuenta = await _ejecucionContext.TMatrizContable
+        var gastosPendientes = gastosUltimoNivel
+            .Where(o => !objetosConCuentaActiva.Contains(o.IdObjetoGasto))
+            .Select(o => new RelacionPendienteResponse
+            {
+                Id = o.IdObjetoGasto,
+                Tipo = "Gasto",
+                Numero = o.NumeroObjeto,
+                Nombre = o.NombreObjeto,
+            })
+            .ToList();
+
+        var todosLosRecursos = await _presupuestoContext.TRecursos
             .AsNoTracking()
-            .Where(m => (vigencia <= 0 || m.IdVigencia == vigencia) && m.IdRecurso != null)
-            .Select(m => m.IdRecurso!.Value)
-            .Distinct()
+            .Where(r => vigencia <= 0 || r.IdVigencia == vigencia)
+            .OrderBy(r => r.NumeroRecurso)
+            .Select(r => new { r.IdRecurso, r.IdRecursoRel, r.NumeroRecurso, r.NombreRecurso })
             .ToListAsync();
 
-        var consultaGastos = _presupuestoContext.TObjetosGasto
-            .AsNoTracking()
-            .Where(o => (vigencia <= 0 || o.IdVigencia == vigencia) && o.UltimoNivel == "S");
-
-        if (objetosConCuenta.Count > 0)
-        {
-            consultaGastos = consultaGastos.Where(o => !objetosConCuenta.Contains(o.IdObjetoGasto));
-        }
-
-        var sinRelacionarGastos = await consultaGastos.CountAsync();
-
-        var idsRecursosPadre = await _presupuestoContext.TRecursos
-            .AsNoTracking()
-            .Where(r => (vigencia <= 0 || r.IdVigencia == vigencia) && r.IdRecursoRel != null)
+        var idsRecursosPadre = todosLosRecursos
+            .Where(r => r.IdRecursoRel != null)
             .Select(r => r.IdRecursoRel!.Value)
-            .Distinct()
-            .ToListAsync();
+            .ToHashSet();
 
-        var consultaRecursos = _presupuestoContext.TRecursos
-            .AsNoTracking()
-            .Where(r => vigencia <= 0 || r.IdVigencia == vigencia);
+        var recursosPendientes = todosLosRecursos
+            .Where(r => !idsRecursosPadre.Contains(r.IdRecurso) && !recursosConCuentaActiva.Contains(r.IdRecurso))
+            .Select(r => new RelacionPendienteResponse
+            {
+                Id = r.IdRecurso,
+                Tipo = "Recurso",
+                Numero = r.NumeroRecurso,
+                Nombre = r.NombreRecurso,
+            })
+            .ToList();
 
-        if (idsRecursosPadre.Count > 0)
+        return new PendientesMatrizResponse
         {
-            consultaRecursos = consultaRecursos.Where(r => !idsRecursosPadre.Contains(r.IdRecurso));
-        }
-
-        if (recursosConCuenta.Count > 0)
-        {
-            consultaRecursos = consultaRecursos.Where(r => !recursosConCuenta.Contains(r.IdRecurso));
-        }
-
-        var sinRelacionarRecursos = await consultaRecursos.CountAsync();
-
-        return Ok(new PendientesMatrizResponse
-        {
-            GastosSinRelacionar = sinRelacionarGastos,
-            RecursosSinRelacionar = sinRelacionarRecursos
-        });
+            GastosSinRelacionar = gastosPendientes.Count,
+            RecursosSinRelacionar = recursosPendientes.Count,
+            RelacionesPendientes = [.. gastosPendientes, .. recursosPendientes],
+        };
     }
 
     private async Task<HashSet<int>> ObtenerDescendientesCuenta(int idCtaContable, int vigencia)

@@ -127,4 +127,31 @@ public class PendientesMatrizResponse
     public int GastosSinRelacionar { get; set; }
 
     public int RecursosSinRelacionar { get; set; }
+
+    public List<RelacionPendienteResponse> RelacionesPendientes { get; set; } = [];
+}
+
+/// <summary>Partida presupuestaria de último nivel sin relación activa en la matriz contable.</summary>
+public class RelacionPendienteResponse
+{
+    public int Id { get; set; }
+
+    /// <summary>"Gasto" o "Recurso".</summary>
+    public string Tipo { get; set; } = string.Empty;
+
+    public long? Numero { get; set; }
+
+    public string? Nombre { get; set; }
+}
+
+/// <summary>Datos completos para exportar la Matriz Contable (filtrada) y las Relaciones Pendientes.</summary>
+public class ExportacionMatrizResponse
+{
+    public int? Ejercicio { get; set; }
+
+    public string? Usuario { get; set; }
+
+    public List<MatrizContableResponse> MatrizContable { get; set; } = [];
+
+    public List<RelacionPendienteResponse> RelacionesPendientes { get; set; } = [];
 }
