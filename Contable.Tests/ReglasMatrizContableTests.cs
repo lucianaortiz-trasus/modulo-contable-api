@@ -359,4 +359,31 @@ public class ReglasMatrizContableTests
         exportacion.MatrizContable[0].Estado.Should().Be("Activa");
         exportacion.RelacionesPendientes.Should().HaveCount(2);
     }
+
+    [Fact]
+    public void FormatearComentariosHistorial_CumpleFormatoEspecificado()
+    {
+        var altaGasto = ReglasMatrizContable.FormatearComentarioAlta(
+            "05.01.02.01.02",
+            "Adquisicion de Repuestos en General",
+            "Gasto",
+            101011607,
+            "Tasa Administrativa S/ Vehículos");
+
+        altaGasto.Should().Be(
+            "Se crea la relación\nCuenta: 05.01.02.01.02 - Adquisicion de Repuestos en General\nObjeto del Gasto: 101011607 - Tasa Administrativa S/ Vehículos");
+
+        var modRecurso = ReglasMatrizContable.FormatearComentarioModificacion(
+            "04.01.04.02",
+            "Venta de Bienes de Uso",
+            "Recurso",
+            101021000,
+            "VENTA DE PLIEGOS");
+
+        modRecurso.Should().Be(
+            "Se modifica la relación. Nuevos datos:\nCuenta: 04.01.04.02 - Venta de Bienes de Uso\nRecurso: 101021000 - VENTA DE PLIEGOS");
+
+        ReglasMatrizContable.FormatearComentarioEliminacion().Should().Be("Se elimina la relación");
+        ReglasMatrizContable.FormatearComentarioDesactivacion().Should().Be("Se deja inactiva la relación");
+    }
 }

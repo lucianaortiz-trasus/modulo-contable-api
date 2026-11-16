@@ -31,6 +31,8 @@ public interface IMatrizContableService
 
     Task<OperationResponse<MatrizContableResponse>> Desactivar(int idMatrizCble);
 
+    Task<OperationResponse<List<HistorialMatrizResponse>>> GetHistorial(int idMatrizCble);
+
     /// <summary>Vista previa de la importacion: no escribe nada.</summary>
     Task<OperationResponse<PlanImportacionResponse>> PlanificarImportacion(int ejercicioDestino);
 

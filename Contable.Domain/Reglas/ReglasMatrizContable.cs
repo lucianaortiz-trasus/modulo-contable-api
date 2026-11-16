@@ -109,6 +109,43 @@ public static class ReglasMatrizContable
         return validacion;
     }
 
+    // ---- Auditoría / Historial de la Relación (T.16409) ------------------
+
+    public const string AccionGenerar = "Generar";
+    public const string AccionModificar = "Modificar";
+    public const string AccionEliminar = "Eliminar";
+    public const string AccionDesactivar = "Desactivar";
+
+    public static string FormatearComentarioAlta(
+        string? codigoCuenta,
+        string? nombreCuenta,
+        string? tipoPartida,
+        long? numeroPartida,
+        string? nombrePartida)
+    {
+        var rotuloPartida = string.Equals(tipoPartida, "Recurso", StringComparison.OrdinalIgnoreCase)
+            ? "Recurso"
+            : "Objeto del Gasto";
+        return $"Se crea la relación\nCuenta: {codigoCuenta} - {nombreCuenta}\n{rotuloPartida}: {numeroPartida} - {nombrePartida}";
+    }
+
+    public static string FormatearComentarioModificacion(
+        string? codigoCuenta,
+        string? nombreCuenta,
+        string? tipoPartida,
+        long? numeroPartida,
+        string? nombrePartida)
+    {
+        var rotuloPartida = string.Equals(tipoPartida, "Recurso", StringComparison.OrdinalIgnoreCase)
+            ? "Recurso"
+            : "Objeto del Gasto";
+        return $"Se modifica la relación. Nuevos datos:\nCuenta: {codigoCuenta} - {nombreCuenta}\n{rotuloPartida}: {numeroPartida} - {nombrePartida}";
+    }
+
+    public static string FormatearComentarioEliminacion() => "Se elimina la relación";
+
+    public static string FormatearComentarioDesactivacion() => "Se deja inactiva la relación";
+
     private static Validacion Validar(DatosMatriz datos, ContextoMatriz contexto)
     {
         var validacion = new Validacion();

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Dapper;
 using Contable.Application.RequestDto.MatrizContable;
 using Contable.Application.ResponseDto.Dtos.MatrizContable;
 using Contable.Domain.Reglas;
@@ -168,7 +170,20 @@ public class MatrizContableService(
         await _ejecucionContext.SaveChangesAsync();
 
         var enriquecidas = await Enriquecer([fila]);
-        return Ok(enriquecidas[0]);
+        var creada = enriquecidas[0];
+
+        await RegistrarHistorial(
+            creada.IdMatrizCble,
+            ReglasMatrizContable.AccionGenerar,
+            ReglasMatrizContable.FormatearComentarioAlta(
+                creada.CodigoCuenta,
+                creada.NombreCuenta,
+                creada.TipoPartida,
+                creada.NumeroObjeto ?? creada.NumeroRecurso,
+                creada.NombreObjeto ?? creada.NombreRecurso),
+            fila.FecIng);
+
+        return Ok(creada);
     }
 
     public async Task<OperationResponse<MatrizContableResponse>> Editar(int idMatrizCble, MatrizContableRequest request)
@@ -202,7 +217,20 @@ public class MatrizContableService(
         await _ejecucionContext.SaveChangesAsync();
 
         var enriquecidas = await Enriquecer([fila]);
-        return Ok(enriquecidas[0]);
+        var editada = enriquecidas[0];
+
+        await RegistrarHistorial(
+            editada.IdMatrizCble,
+            ReglasMatrizContable.AccionModificar,
+            ReglasMatrizContable.FormatearComentarioModificacion(
+                editada.CodigoCuenta,
+                editada.NombreCuenta,
+                editada.TipoPartida,
+                editada.NumeroObjeto ?? editada.NumeroRecurso,
+                editada.NombreObjeto ?? editada.NombreRecurso),
+            fila.FecAct);
+
+        return Ok(editada);
     }
 
     public async Task<OperationResponse<bool>> CuentaTieneAsientos(int idCtaContable)
@@ -229,8 +257,16 @@ public class MatrizContableService(
             }
         }
 
+        await AsegurarHistorialInicial(fila);
+
         _ejecucionContext.TMatrizContable.Remove(fila);
         await _ejecucionContext.SaveChangesAsync();
+
+        await RegistrarHistorial(
+            idMatrizCble,
+            ReglasMatrizContable.AccionEliminar,
+            ReglasMatrizContable.FormatearComentarioEliminacion(),
+            DateTime.Now);
 
         return Ok(true);
     }
@@ -241,6 +277,8 @@ public class MatrizContableService(
             .FirstOrDefaultAsync(m => m.IdMatrizCble == idMatrizCble);
 
         if (fila is null) return NotFound<MatrizContableResponse>("La relacion no existe.");
+
+        await AsegurarHistorialInicial(fila);
 
         if (fila.IdCtaContable.HasValue)
         {
@@ -261,7 +299,36 @@ public class MatrizContableService(
         await _ejecucionContext.SaveChangesAsync();
 
         var enriquecidas = await Enriquecer([fila]);
-        return Ok(enriquecidas[0]);
+        var desactivada = enriquecidas[0];
+
+        await RegistrarHistorial(
+            idMatrizCble,
+            ReglasMatrizContable.AccionDesactivar,
+            ReglasMatrizContable.FormatearComentarioDesactivacion(),
+            fila.FecAct);
+
+        return Ok(desactivada);
+    }
+
+    public async Task<OperationResponse<List<HistorialMatrizResponse>>> GetHistorial(int idMatrizCble)
+    {
+        var fila = await _ejecucionContext.TMatrizContable
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.IdMatrizCble == idMatrizCble);
+
+        if (fila is not null)
+        {
+            await AsegurarHistorialInicial(fila);
+        }
+
+        var historial = await LeerHistorialDeRelacion(idMatrizCble);
+
+        var ordenados = historial
+            .OrderByDescending(h => h.Fecha)
+            .ThenByDescending(h => h.IdHistorial)
+            .ToList();
+
+        return Ok(ordenados);
     }
 
     public async Task<OperationResponse<List<PartidaResponse>>> BuscarObjetosGasto(FiltroPartidaRequest filtro)
@@ -932,5 +999,318 @@ public class MatrizContableService(
             .FirstOrDefaultAsync();
 
         return activa;
+    }
+
+    // ---- Historial de Relaciones (T.16409) -------------------------------
+
+    private static readonly object HistorialLock = new();
+    private static readonly string ArchivoHistorialLocal = Path.Combine(AppContext.BaseDirectory, "historial-matriz.json");
+    private static bool TablaHistorialVerificada;
+
+    private async Task AsegurarHistorialInicial(TMatrizContable fila)
+    {
+        var existentes = await LeerHistorialDeRelacion(fila.IdMatrizCble);
+        if (existentes.Any(h => string.Equals(h.Accion, ReglasMatrizContable.AccionGenerar, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var enriquecidas = await Enriquecer([fila]);
+        if (enriquecidas.Count == 0) return;
+
+        var r = enriquecidas[0];
+        var usuarioIng = await ResolverNombreUsuarioAuditoria(fila.UserIng);
+
+        await RegistrarHistorial(
+            fila.IdMatrizCble,
+            ReglasMatrizContable.AccionGenerar,
+            ReglasMatrizContable.FormatearComentarioAlta(
+                r.CodigoCuenta,
+                r.NombreCuenta,
+                r.TipoPartida,
+                r.NumeroObjeto ?? r.NumeroRecurso,
+                r.NombreObjeto ?? r.NombreRecurso),
+            fila.FecIng ?? DateTime.Now,
+            usuarioIng);
+
+        if (fila.FecAct.HasValue && existingHasNoModOrDeactivate(existentes))
+        {
+            var usuarioAct = await ResolverNombreUsuarioAuditoria(fila.UserAct ?? fila.UserIng);
+            if (!r.Activa)
+            {
+                await RegistrarHistorial(
+                    fila.IdMatrizCble,
+                    ReglasMatrizContable.AccionDesactivar,
+                    ReglasMatrizContable.FormatearComentarioDesactivacion(),
+                    fila.FecAct.Value,
+                    usuarioAct);
+            }
+            else
+            {
+                await RegistrarHistorial(
+                    fila.IdMatrizCble,
+                    ReglasMatrizContable.AccionModificar,
+                    ReglasMatrizContable.FormatearComentarioModificacion(
+                        r.CodigoCuenta,
+                        r.NombreCuenta,
+                        r.TipoPartida,
+                        r.NumeroObjeto ?? r.NumeroRecurso,
+                        r.NombreObjeto ?? r.NombreRecurso),
+                    fila.FecAct.Value,
+                    usuarioAct);
+            }
+        }
+    }
+
+    private static bool existingHasNoModOrDeactivate(List<HistorialMatrizResponse> existentes)
+        => !existentes.Any(h =>
+            string.Equals(h.Accion, ReglasMatrizContable.AccionModificar, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(h.Accion, ReglasMatrizContable.AccionDesactivar, StringComparison.OrdinalIgnoreCase));
+
+    private async Task RegistrarHistorial(
+        int idMatrizCble,
+        string accion,
+        string comentarios,
+        DateTime? fecha = null,
+        string? usuarioExplicito = null)
+    {
+        var fechaEvento = fecha ?? DateTime.Now;
+        var usuario = !string.IsNullOrWhiteSpace(usuarioExplicito)
+            ? usuarioExplicito
+            : await ObtenerUsuarioActualFormateado();
+
+        var nuevoEvento = new HistorialMatrizResponse
+        {
+            IdHistorial = (int)(DateTime.UtcNow.Ticks % int.MaxValue),
+            IdMatrizCble = idMatrizCble,
+            Fecha = fechaEvento,
+            Usuario = usuario,
+            Accion = accion,
+            Comentarios = comentarios,
+        };
+
+        GuardarEnArchivoLocal(nuevoEvento);
+        await IntentarGuardarEnTablaOracle(nuevoEvento);
+    }
+
+    private async Task<List<HistorialMatrizResponse>> LeerHistorialDeRelacion(int idMatrizCble)
+    {
+        var desdeArchivo = LeerDesdeArchivoLocal(idMatrizCble);
+        var desdeOracle = await IntentarLeerDesdeTablaOracle(idMatrizCble);
+
+        var combinados = new List<HistorialMatrizResponse>(desdeOracle);
+        foreach (var item in desdeArchivo)
+        {
+            var duplicado = combinados.Any(c =>
+                string.Equals(c.Accion, item.Accion, StringComparison.OrdinalIgnoreCase) &&
+                Math.Abs((c.Fecha - item.Fecha).TotalSeconds) < 2);
+            if (!duplicado)
+            {
+                combinados.Add(item);
+            }
+        }
+
+        return combinados;
+    }
+
+    private async Task<string> ObtenerUsuarioActualFormateado()
+    {
+        var idPersona = _httpContextAccessor.HttpContext?.User?.Claims
+            .FirstOrDefault(x => x.Type == "IdPersona")?.Value;
+
+        if (!string.IsNullOrWhiteSpace(idPersona))
+        {
+            var persona = await _portalContext.TPersonas
+                .AsNoTracking()
+                .Where(p => p.IdPersona == idPersona)
+                .Select(p => new { p.Apellido, p.Nombre })
+                .FirstOrDefaultAsync();
+
+            if (persona is not null && (!string.IsNullOrWhiteSpace(persona.Apellido) || !string.IsNullOrWhiteSpace(persona.Nombre)))
+            {
+                return $"{persona.Apellido?.Trim()}, {persona.Nombre?.Trim()}".Trim(' ', ',');
+            }
+        }
+
+        var userCache = GetUserCache();
+        if (!string.IsNullOrWhiteSpace(userCache))
+        {
+            return await ResolverNombreUsuarioAuditoria(userCache);
+        }
+
+        var apellidoYNombre = _httpContextAccessor.HttpContext?.User?.Claims
+            .FirstOrDefault(x => x.Type == "ApellidoYNombre")?.Value;
+
+        return !string.IsNullOrWhiteSpace(apellidoYNombre) ? apellidoYNombre : "Sistema";
+    }
+
+    private async Task<string> ResolverNombreUsuarioAuditoria(string? nombreUsuario)
+    {
+        if (string.IsNullOrWhiteSpace(nombreUsuario)) return "Sistema";
+
+        try
+        {
+            var limpio = nombreUsuario.Trim().ToUpper();
+            var datosPersona = await (
+                from u in _portalContext.TUsuariosNew.AsNoTracking()
+                join p in _portalContext.TPersonas.AsNoTracking()
+                    on u.IdPersona equals p.IdPersona
+                where u.NombreUsuario != null && u.NombreUsuario.ToUpper() == limpio
+                select new { p.Apellido, p.Nombre }
+            ).FirstOrDefaultAsync();
+
+            if (datosPersona is not null && (!string.IsNullOrWhiteSpace(datosPersona.Apellido) || !string.IsNullOrWhiteSpace(datosPersona.Nombre)))
+            {
+                return $"{datosPersona.Apellido?.Trim()}, {datosPersona.Nombre?.Trim()}".Trim(' ', ',');
+            }
+        }
+        catch
+        {
+            // Si no se puede resolver en PORTAL, se conserva el identificador de usuario.
+        }
+
+        return nombreUsuario;
+    }
+
+    private static void GuardarEnArchivoLocal(HistorialMatrizResponse evento)
+    {
+        lock (HistorialLock)
+        {
+            try
+            {
+                var lista = new List<HistorialMatrizResponse>();
+                if (File.Exists(ArchivoHistorialLocal))
+                {
+                    var json = File.ReadAllText(ArchivoHistorialLocal);
+                    lista = JsonSerializer.Deserialize<List<HistorialMatrizResponse>>(json) ?? [];
+                }
+
+                evento.IdHistorial = lista.Count > 0 ? lista.Max(x => x.IdHistorial) + 1 : 1;
+                lista.Add(evento);
+                File.WriteAllText(ArchivoHistorialLocal, JsonSerializer.Serialize(lista));
+            }
+            catch
+            {
+                // Ignorar errores de sistema de archivos de solo lectura
+            }
+        }
+    }
+
+    private static List<HistorialMatrizResponse> LeerDesdeArchivoLocal(int idMatrizCble)
+    {
+        lock (HistorialLock)
+        {
+            try
+            {
+                if (!File.Exists(ArchivoHistorialLocal)) return [];
+                var json = File.ReadAllText(ArchivoHistorialLocal);
+                var lista = JsonSerializer.Deserialize<List<HistorialMatrizResponse>>(json) ?? [];
+                return lista.Where(x => x.IdMatrizCble == idMatrizCble).ToList();
+            }
+            catch
+            {
+                return [];
+            }
+        }
+    }
+
+    private async Task AsegurarTablaOracle()
+    {
+        if (TablaHistorialVerificada) return;
+        TablaHistorialVerificada = true;
+
+        try
+        {
+            var conn = _ejecucionContext.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                await _ejecucionContext.Database.OpenConnectionAsync();
+            }
+
+            const string ddl = """
+                DECLARE
+                    v_existe NUMBER := 0;
+                BEGIN
+                    SELECT COUNT(*) INTO v_existe
+                      FROM ALL_TABLES
+                     WHERE OWNER = 'EJECUCION'
+                       AND TABLE_NAME = 'T_MATRIZ_CONTABLE_HIST';
+                    IF v_existe = 0 THEN
+                        EXECUTE IMMEDIATE '
+                            CREATE TABLE EJECUCION.T_MATRIZ_CONTABLE_HIST (
+                                ID_HISTORIAL NUMBER PRIMARY KEY,
+                                ID_MATRIZ_CBLE NUMBER NOT NULL,
+                                FECHA DATE NOT NULL,
+                                USUARIO VARCHAR2(200),
+                                ACCION VARCHAR2(50),
+                                COMENTARIOS VARCHAR2(1000)
+                            )';
+                    END IF;
+                EXCEPTION
+                    WHEN OTHERS THEN NULL;
+                END;
+                """;
+            await conn.ExecuteAsync(ddl);
+        }
+        catch
+        {
+            // Si el usuario de BD no posee permisos DDL, se opera con el almacén local.
+        }
+    }
+
+    private async Task IntentarGuardarEnTablaOracle(HistorialMatrizResponse evento)
+    {
+        try
+        {
+            await AsegurarTablaOracle();
+            var conn = _ejecucionContext.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                await _ejecucionContext.Database.OpenConnectionAsync();
+            }
+
+            const string sql = """
+                INSERT INTO EJECUCION.T_MATRIZ_CONTABLE_HIST
+                    (ID_HISTORIAL, ID_MATRIZ_CBLE, FECHA, USUARIO, ACCION, COMENTARIOS)
+                VALUES
+                    (:IdHistorial, :IdMatrizCble, :Fecha, :Usuario, :Accion, :Comentarios)
+                """;
+            await conn.ExecuteAsync(sql, evento);
+        }
+        catch
+        {
+            // Fallback silencioso a almacenamiento local si la tabla no existe en el esquema
+        }
+    }
+
+    private async Task<List<HistorialMatrizResponse>> IntentarLeerDesdeTablaOracle(int idMatrizCble)
+    {
+        try
+        {
+            await AsegurarTablaOracle();
+            var conn = _ejecucionContext.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                await _ejecucionContext.Database.OpenConnectionAsync();
+            }
+
+            const string sql = """
+                SELECT ID_HISTORIAL AS IdHistorial,
+                       ID_MATRIZ_CBLE AS IdMatrizCble,
+                       FECHA AS Fecha,
+                       USUARIO AS Usuario,
+                       ACCION AS Accion,
+                       COMENTARIOS AS Comentarios
+                  FROM EJECUCION.T_MATRIZ_CONTABLE_HIST
+                 WHERE ID_MATRIZ_CBLE = :IdMatrizCble
+                 ORDER BY FECHA DESC, ID_HISTORIAL DESC
+                """;
+            var filas = await conn.QueryAsync<HistorialMatrizResponse>(sql, new { IdMatrizCble = idMatrizCble });
+            return filas.ToList();
+        }
+        catch
+        {
+            return [];
+        }
     }
 }

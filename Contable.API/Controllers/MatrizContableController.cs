@@ -52,6 +52,13 @@ public class MatrizContableController(IMatrizContableService servicio) : BaseCon
     public async Task<IActionResult> Desactivar(int idMatrizCble)
         => Return(await _servicio.Desactivar(idMatrizCble));
 
+    /// <summary>Obtiene el historial de auditoría de una relación ordenando del cambio más reciente al más antiguo (T.16409).</summary>
+    [HttpGet("{idMatrizCble:int}/Historial")]
+    [HttpGet("Historial/{idMatrizCble:int}")]
+    [ProducesResponseType(typeof(OperationResponse<List<HistorialMatrizResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetHistorial(int idMatrizCble)
+        => Return(await _servicio.GetHistorial(idMatrizCble));
+
     /// <summary>Objetos de gasto para el selector de partidas.</summary>
     [HttpPost("ObjetosGasto")]
     [ProducesResponseType(typeof(OperationResponse<List<PartidaResponse>>), StatusCodes.Status200OK)]

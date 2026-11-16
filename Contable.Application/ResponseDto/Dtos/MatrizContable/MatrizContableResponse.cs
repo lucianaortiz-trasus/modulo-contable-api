@@ -155,3 +155,22 @@ public class ExportacionMatrizResponse
 
     public List<RelacionPendienteResponse> RelacionesPendientes { get; set; } = [];
 }
+
+/// <summary>Registro de auditoría/historial de una relación de la matriz contable (T.16409).</summary>
+public class HistorialMatrizResponse
+{
+    public int IdHistorial { get; set; }
+
+    public int IdMatrizCble { get; set; }
+
+    public DateTime Fecha { get; set; }
+
+    public string FechaFormateada => Fecha.ToString("dd/MM/yyyy - HH:mm");
+
+    public string Usuario { get; set; } = string.Empty;
+
+    /// <summary>"Generar", "Modificar", "Eliminar", "Desactivar".</summary>
+    public string Accion { get; set; } = string.Empty;
+
+    public string Comentarios { get; set; } = string.Empty;
+}
