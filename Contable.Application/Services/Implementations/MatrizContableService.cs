@@ -155,6 +155,15 @@ public class MatrizContableService(
         return Ok(enriquecidas[0]);
     }
 
+    public async Task<OperationResponse<bool>> CuentaTieneAsientos(int idCtaContable)
+    {
+        var tieneAsientos = await _ejecucionContext.TAsientosDetalle
+            .AsNoTracking()
+            .AnyAsync(d => d.IdCtaContable == idCtaContable);
+
+        return Ok(tieneAsientos);
+    }
+
     public async Task<OperationResponse<bool>> Eliminar(int idMatrizCble)
     {
         var fila = await _ejecucionContext.TMatrizContable
@@ -763,6 +772,14 @@ public class MatrizContableService(
             .Where(v => idsVigencia.Contains(v.IdVigencia))
             .ToDictionaryAsync(v => v.IdVigencia, v => v.Ejercicio);
 
+        var cuentasConAsientos = (await _ejecucionContext.TAsientosDetalle
+            .AsNoTracking()
+            .Where(d => idsCuenta.Contains(d.IdCtaContable))
+            .Select(d => d.IdCtaContable)
+            .Distinct()
+            .ToListAsync())
+            .ToHashSet();
+
         return
         [
             .. filas.Select(f =>
@@ -775,6 +792,7 @@ public class MatrizContableService(
                     new DatosMatriz(f.IdCtaContable, f.IdObjetoGasto, f.IdRecurso, f.IdVigencia));
 
                 var estaActiva = cuenta != null ? cuenta.Activa == ReglasJerarquiaCuentas.CuentaActiva : true;
+                var tieneAsientos = f.IdCtaContable is not null && cuentasConAsientos.Contains(f.IdCtaContable.Value);
 
                 return new MatrizContableResponse
                 {
@@ -783,6 +801,7 @@ public class MatrizContableService(
                     CodigoCuenta = cuenta?.Codigo,
                     NombreCuenta = cuenta?.Nombre,
                     Activa = estaActiva,
+                    TieneAsientos = tieneAsientos,
                     IdObjetoGasto = f.IdObjetoGasto,
                     NumeroObjeto = objeto?.NumeroObjeto,
                     NombreObjeto = objeto?.NombreObjeto,
