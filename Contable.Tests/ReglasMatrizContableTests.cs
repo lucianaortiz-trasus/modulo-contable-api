@@ -145,4 +145,245 @@ public class ReglasMatrizContableTests
         validacion.Errores.Should().Contain(e => e.Contains("cuenta contable"));
         validacion.Errores.Should().Contain(e => e.Contains("ejercicio"));
     }
+
+    [Fact]
+    public void MatrizContableResponse_ExponeEstadoYActiva()
+    {
+        var activa = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse { Activa = true };
+        activa.Estado.Should().Be("Activa");
+
+        var inactiva = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse { Activa = false };
+        inactiva.Estado.Should().Be("Inactiva");
+    }
+
+    [Fact]
+    public void PendientesMatrizResponse_CalculaHayPendientesCorrectamente()
+    {
+        var sinPendientes = new Contable.Application.ResponseDto.Dtos.MatrizContable.PendientesMatrizResponse
+        {
+            GastosSinRelacionar = 0,
+            RecursosSinRelacionar = 0
+        };
+        sinPendientes.HayPendientes.Should().BeFalse();
+        sinPendientes.TotalPendientes.Should().Be(0);
+
+        var conPendientes = new Contable.Application.ResponseDto.Dtos.MatrizContable.PendientesMatrizResponse
+        {
+            GastosSinRelacionar = 5,
+            RecursosSinRelacionar = 2
+        };
+        conPendientes.HayPendientes.Should().BeTrue();
+        conPendientes.TotalPendientes.Should().Be(7);
+    }
+
+    [Fact]
+    public void PartidaArbolResponse_ConstruyeJerarquia()
+    {
+        var raiz = new Contable.Application.ResponseDto.Dtos.MatrizContable.PartidaArbolResponse
+        {
+            Id = 1,
+            Numero = 2000000,
+            Nombre = "Bienes de Consumo",
+            EsHoja = false
+        };
+        var hijo = new Contable.Application.ResponseDto.Dtos.MatrizContable.PartidaArbolResponse
+        {
+            Id = 2,
+            IdPadre = 1,
+            Numero = 2070400,
+            Nombre = "Repuestos y accesorios",
+            EsHoja = true
+        };
+        raiz.Hijas.Add(hijo);
+
+        raiz.Hijas.Should().ContainSingle();
+        raiz.Hijas[0].Codigo.Should().Be("2070400");
+        raiz.Hijas[0].EsHoja.Should().BeTrue();
+    }
+
+    [Fact]
+    public void OrdenamientoMatriz_OrdenaPorCuentaTipoYPartida()
+    {
+        var lista = new List<Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse>
+        {
+            new() { CodigoCuenta = "05.01", NombreCuenta = "Repuestos", TipoPartida = "Gasto", NumeroObjeto = 2070400 },
+            new() { CodigoCuenta = "01.01", NombreCuenta = "Caja", TipoPartida = "Gasto", NumeroObjeto = 3140100 },
+            new() { CodigoCuenta = "01.01", NombreCuenta = "Caja", TipoPartida = "Gasto", NumeroObjeto = 1010000 },
+            new() { CodigoCuenta = "04.01", NombreCuenta = "Ventas", TipoPartida = "Recurso", NumeroRecurso = 101021000 },
+        };
+
+        var ordenadas = lista
+            .OrderBy(f => f.CodigoCuenta, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.NombreCuenta, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.TipoPartida, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.NumeroObjeto?.ToString() ?? f.NumeroRecurso?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        ordenadas[0].CodigoCuenta.Should().Be("01.01");
+        ordenadas[0].NumeroObjeto.Should().Be(1010000);
+        ordenadas[1].NumeroObjeto.Should().Be(3140100);
+        ordenadas[2].CodigoCuenta.Should().Be("04.01");
+        ordenadas[3].CodigoCuenta.Should().Be("05.01");
+    }
+
+    [Fact]
+    public void PartidaArbolResponse_IndicaSiYaPoseeRelacionActiva()
+    {
+        var partida = new Contable.Application.ResponseDto.Dtos.MatrizContable.PartidaArbolResponse
+        {
+            Id = 10,
+            Numero = 2070400,
+            Nombre = "Repuestos",
+            EsHoja = true,
+            YaRelacionada = true
+        };
+
+        partida.YaRelacionada.Should().BeTrue();
+        partida.EsHoja.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidarAlta_RechazaCuentaNoImputableOInactiva()
+    {
+        var contextoNoImputable = ContextoSano() with { CuentaEsImputable = false };
+        var validacionNoImputable = ReglasMatrizContable.ValidarAlta(Gasto(), contextoNoImputable);
+        validacionNoImputable.EsValida.Should().BeFalse();
+        validacionNoImputable.Errores.Should().Contain(e => e.Contains("no es imputable"));
+
+        var contextoInactiva = ContextoSano() with { CuentaEstaActiva = false };
+        var validacionInactiva = ReglasMatrizContable.ValidarAlta(Gasto(), contextoInactiva);
+        validacionInactiva.EsValida.Should().BeFalse();
+        validacionInactiva.Errores.Should().Contain(e => e.Contains("dada de baja"));
+    }
+
+    [Fact]
+    public void ValidarAlta_RechazaPartidaYaRelacionadaEnLaMatriz()
+    {
+        var contextoDuplicada = ContextoSano(partidaYaAsignadaA: "01.01.01.01");
+        var validacion = ReglasMatrizContable.ValidarAlta(Gasto(), contextoDuplicada);
+
+        validacion.EsValida.Should().BeFalse();
+        validacion.Errores.Should().Contain(e => e.Contains("ya esta relacionada con la cuenta 01.01.01.01"));
+    }
+
+    [Fact]
+    public void ValidarEdicion_AceptaModificacionValida()
+    {
+        var validacion = ReglasMatrizContable.ValidarEdicion(Gasto(), ContextoSano());
+        validacion.EsValida.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidarEdicion_RechazaPartidaAsignadaAOtraCuenta()
+    {
+        var contextoDuplicada = ContextoSano(partidaYaAsignadaA: "01.01.01.02");
+        var validacion = ReglasMatrizContable.ValidarEdicion(Gasto(), contextoDuplicada);
+
+        validacion.EsValida.Should().BeFalse();
+        validacion.Errores.Should().Contain(e => e.Contains("ya esta relacionada con la cuenta 01.01.01.02"));
+    }
+
+    [Fact]
+    public void MatrizContableResponse_PermiteEditar_DependeDeAsientos()
+    {
+        var responseSinAsientos = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse
+        {
+            IdMatrizCble = 1,
+            TieneAsientos = false
+        };
+        responseSinAsientos.PermiteEditar.Should().BeTrue();
+
+        var responseConAsientos = new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse
+        {
+            IdMatrizCble = 2,
+            TieneAsientos = true
+        };
+        responseConAsientos.PermiteEditar.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ValidarEliminacion_PermiteEliminar_SiNoTieneAsientos()
+    {
+        var validacion = ReglasMatrizContable.ValidarEliminacion(tieneAsientos: false);
+        validacion.EsValida.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidarEliminacion_RechazaEliminacion_SiTieneAsientos()
+    {
+        var validacion = ReglasMatrizContable.ValidarEliminacion(tieneAsientos: true);
+        validacion.EsValida.Should().BeFalse();
+        validacion.Errores.Should().Contain(e => e.Contains("posee asientos registrados"));
+    }
+
+    [Fact]
+    public void ExportacionMatrizResponse_MantieneSeccionMatrizYRelacionesPendientes()
+    {
+        var exportacion = new Contable.Application.ResponseDto.Dtos.MatrizContable.ExportacionMatrizResponse
+        {
+            Ejercicio = 2026,
+            Usuario = "Rojas, Ricardo",
+            MatrizContable =
+            [
+                new Contable.Application.ResponseDto.Dtos.MatrizContable.MatrizContableResponse
+                {
+                    IdMatrizCble = 1,
+                    CodigoCuenta = "01.01.01.01",
+                    NombreCuenta = "Caja en pesos",
+                    TipoPartida = "Gasto",
+                    NumeroObjeto = 3140100,
+                    NombreObjeto = "honorarios personal contratado",
+                    Activa = true,
+                }
+            ],
+            RelacionesPendientes =
+            [
+                new Contable.Application.ResponseDto.Dtos.MatrizContable.RelacionPendienteResponse
+                {
+                    Id = 10,
+                    Tipo = "Gasto",
+                    Numero = 1010101,
+                    Nombre = "intendente",
+                },
+                new Contable.Application.ResponseDto.Dtos.MatrizContable.RelacionPendienteResponse
+                {
+                    Id = 20,
+                    Tipo = "Recurso",
+                    Numero = 1010301,
+                    Nombre = "Tasa S/ Automotores Del Ejercicio",
+                }
+            ]
+        };
+
+        exportacion.MatrizContable.Should().HaveCount(1);
+        exportacion.MatrizContable[0].Estado.Should().Be("Activa");
+        exportacion.RelacionesPendientes.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void FormatearComentariosHistorial_CumpleFormatoEspecificado()
+    {
+        var altaGasto = ReglasMatrizContable.FormatearComentarioAlta(
+            "05.01.02.01.02",
+            "Adquisicion de Repuestos en General",
+            "Gasto",
+            101011607,
+            "Tasa Administrativa S/ Vehículos");
+
+        altaGasto.Should().Be(
+            "Se crea la relación\nCuenta: 05.01.02.01.02 - Adquisicion de Repuestos en General\nObjeto del Gasto: 101011607 - Tasa Administrativa S/ Vehículos");
+
+        var modRecurso = ReglasMatrizContable.FormatearComentarioModificacion(
+            "04.01.04.02",
+            "Venta de Bienes de Uso",
+            "Recurso",
+            101021000,
+            "VENTA DE PLIEGOS");
+
+        modRecurso.Should().Be(
+            "Se modifica la relación. Nuevos datos:\nCuenta: 04.01.04.02 - Venta de Bienes de Uso\nRecurso: 101021000 - VENTA DE PLIEGOS");
+
+        ReglasMatrizContable.FormatearComentarioEliminacion().Should().Be("Se elimina la relación");
+        ReglasMatrizContable.FormatearComentarioDesactivacion().Should().Be("Se deja inactiva la relación");
+    }
 }

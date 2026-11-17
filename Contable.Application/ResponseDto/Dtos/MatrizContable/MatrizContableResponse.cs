@@ -26,6 +26,16 @@ public class MatrizContableResponse
     /// <summary>"Gasto" o "Recurso". Vacio si la fila esta mal cargada.</summary>
     public string? TipoPartida { get; set; }
 
+    public bool Activa { get; set; } = true;
+
+    public string Estado => Activa ? "Activa" : "Inactiva";
+
+    /// <summary>Indica si la cuenta contable tiene asientos registrados.</summary>
+    public bool TieneAsientos { get; set; }
+
+    /// <summary>La edición solo está disponible si la cuenta no tiene asientos contables registrados.</summary>
+    public bool PermiteEditar => !TieneAsientos;
+
     public int? IdVigencia { get; set; }
 
     public int? Ejercicio { get; set; }
@@ -84,4 +94,83 @@ public class FilaNoImportableResponse
     public long? NumeroPartida { get; set; }
 
     public string Motivo { get; set; } = string.Empty;
+}
+
+/// <summary>Nodo de árbol de partida presupuestaria (Objeto de Gasto o Recurso) para modales de selección.</summary>
+public class PartidaArbolResponse
+{
+    public int Id { get; set; }
+
+    public int? IdPadre { get; set; }
+
+    public long? Numero { get; set; }
+
+    public string Codigo => Numero?.ToString() ?? string.Empty;
+
+    public string? Nombre { get; set; }
+
+    public bool EsHoja { get; set; }
+
+    /// <summary>Indica si la partida ya posee una relación activa en la matriz contable para este ejercicio.</summary>
+    public bool YaRelacionada { get; set; }
+
+    public List<PartidaArbolResponse> Hijas { get; set; } = [];
+}
+
+/// <summary>Estado de partidas sin relacionar en la matriz contable.</summary>
+public class PendientesMatrizResponse
+{
+    public bool HayPendientes => TotalPendientes > 0;
+
+    public int TotalPendientes => GastosSinRelacionar + RecursosSinRelacionar;
+
+    public int GastosSinRelacionar { get; set; }
+
+    public int RecursosSinRelacionar { get; set; }
+
+    public List<RelacionPendienteResponse> RelacionesPendientes { get; set; } = [];
+}
+
+/// <summary>Partida presupuestaria de último nivel sin relación activa en la matriz contable.</summary>
+public class RelacionPendienteResponse
+{
+    public int Id { get; set; }
+
+    /// <summary>"Gasto" o "Recurso".</summary>
+    public string Tipo { get; set; } = string.Empty;
+
+    public long? Numero { get; set; }
+
+    public string? Nombre { get; set; }
+}
+
+/// <summary>Datos completos para exportar la Matriz Contable (filtrada) y las Relaciones Pendientes.</summary>
+public class ExportacionMatrizResponse
+{
+    public int? Ejercicio { get; set; }
+
+    public string? Usuario { get; set; }
+
+    public List<MatrizContableResponse> MatrizContable { get; set; } = [];
+
+    public List<RelacionPendienteResponse> RelacionesPendientes { get; set; } = [];
+}
+
+/// <summary>Registro de auditoría/historial de una relación de la matriz contable (T.16409).</summary>
+public class HistorialMatrizResponse
+{
+    public int IdHistorial { get; set; }
+
+    public int IdMatrizCble { get; set; }
+
+    public DateTime Fecha { get; set; }
+
+    public string FechaFormateada => Fecha.ToString("dd/MM/yyyy - HH:mm");
+
+    public string Usuario { get; set; } = string.Empty;
+
+    /// <summary>"Generar", "Modificar", "Eliminar", "Desactivar".</summary>
+    public string Accion { get; set; } = string.Empty;
+
+    public string Comentarios { get; set; } = string.Empty;
 }

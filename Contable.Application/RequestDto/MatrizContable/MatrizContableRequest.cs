@@ -29,6 +29,9 @@ public class FiltroMatrizRequest
     /// <summary>"Gasto", "Recurso" o vacio para las dos.</summary>
     public string? TipoPartida { get; set; }
 
+    /// <summary>"Todos", "Activa", "Inactiva".</summary>
+    public string? Estado { get; set; }
+
     public int Pagina { get; set; } = 1;
 
     public int TamanoPagina { get; set; } = 20;
