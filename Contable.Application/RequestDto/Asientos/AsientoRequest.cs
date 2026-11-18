@@ -53,6 +53,11 @@ public class FiltroAsientosRequest
 
     public int? IdTipoAsiento { get; set; }
 
+    /// <summary>
+    /// Clasificación del tipo: Todos, Manual, Automático, Cierre o Apertura.
+    /// </summary>
+    public string? Tipo { get; set; }
+
     public int? Numero { get; set; }
 
     /// <summary>Busca dentro de la leyenda.</summary>
@@ -60,6 +65,9 @@ public class FiltroAsientosRequest
 
     /// <summary>null trae todos, true solo anulados, false solo vigentes.</summary>
     public bool? Anulados { get; set; }
+
+    /// <summary>"Todos", "Vigentes", "Reversados" o "Anulados".</summary>
+    public string? Estado { get; set; }
 
     public int Pagina { get; set; } = 1;
 

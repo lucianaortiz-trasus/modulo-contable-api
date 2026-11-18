@@ -42,6 +42,17 @@ public class AsientoService(
 
     public async Task<OperationResponse<List<AsientoResumenResponse>>> Buscar(FiltroAsientosRequest filtro)
     {
+        var validacion = ReglasAsiento.ValidarFiltroConsulta(
+            filtro.FechaDesde,
+            filtro.FechaHasta,
+            filtro.Numero,
+            filtro.Leyenda);
+
+        if (!validacion.EsValida)
+        {
+            return BadRequest<List<AsientoResumenResponse>>(validacion.Mensaje);
+        }
+
         var pagina = filtro.Pagina < 1 ? 1 : filtro.Pagina;
         var tamano = filtro.TamanoPagina is < 1 or > 200 ? 20 : filtro.TamanoPagina;
 
@@ -53,9 +64,70 @@ public class AsientoService(
         var jurisdiccion = filtro.IdJurisdiccion ?? GetJurisdiccionCache();
         if (jurisdiccion > 0) consulta = consulta.Where(a => a.IdJurisdiccion == jurisdiccion);
 
-        if (filtro.FechaDesde is not null) consulta = consulta.Where(a => a.FecContable >= filtro.FechaDesde);
-        if (filtro.FechaHasta is not null) consulta = consulta.Where(a => a.FecContable <= filtro.FechaHasta);
-        if (filtro.IdTipoAsiento is > 0) consulta = consulta.Where(a => a.IdTipoAsiento == filtro.IdTipoAsiento);
+        if (filtro.FechaDesde is not null)
+        {
+            var desde = filtro.FechaDesde.Value.Date;
+            consulta = consulta.Where(a => a.FecContable >= desde);
+        }
+
+        if (filtro.FechaHasta is not null)
+        {
+            var hastaExclusivo = filtro.FechaHasta.Value.Date.AddDays(1);
+            consulta = consulta.Where(a => a.FecContable < hastaExclusivo);
+        }
+
+        // Filtro por tipo específico.
+        if (filtro.IdTipoAsiento is > 0)
+        {
+            consulta = consulta.Where(a =>
+                a.IdTipoAsiento == filtro.IdTipoAsiento);
+        }
+
+        // Filtro por clasificación.
+        if (!string.IsNullOrWhiteSpace(filtro.Tipo))
+        {
+            var tipo = filtro.Tipo.Trim().ToUpperInvariant();
+
+            consulta = tipo switch
+            {
+                "MANUAL" => consulta.Where(a =>
+                    a.IdTipoAsiento == 1 ||
+                    a.IdTipoAsiento == 2),
+
+                "AUTOMATICO" or "AUTOMÁTICO" => consulta.Where(a =>
+                    a.IdTipoAsiento == 3 ||
+                    a.IdTipoAsiento == 4 ||
+                    a.IdTipoAsiento == 5),
+
+                "CIERRE" => consulta.Where(a =>
+                    a.IdTipoAsiento == 6),
+
+                "APERTURA" => consulta.Where(a =>
+                    a.IdTipoAsiento == 7),
+
+                "TODOS" => consulta,
+
+                _ => consulta
+            };
+        }
+        else if (!string.IsNullOrWhiteSpace(filtro.Tipo) &&
+                 !string.Equals(filtro.Tipo, "Todos", StringComparison.OrdinalIgnoreCase))
+        {
+            var quiereManual = string.Equals(filtro.Tipo, "Manual", StringComparison.OrdinalIgnoreCase);
+            var tipos = await _ejecucionContext.TTiposAsiento.AsNoTracking().ToListAsync();
+            var idsPermitidos = tipos
+                .Where(t => ReglasAsiento.EsTipoManual(t.Codigo, t.Descripcion) == quiereManual)
+                .Select(t => t.IdTipoAsiento)
+                .ToList();
+
+            if (idsPermitidos.Count == 0)
+            {
+                return Paginado<List<AsientoResumenResponse>>([], 0);
+            }
+
+            consulta = consulta.Where(a => idsPermitidos.Contains(a.IdTipoAsiento));
+        }
+
         if (filtro.Numero is > 0) consulta = consulta.Where(a => a.Numero == filtro.Numero);
 
         if (!string.IsNullOrWhiteSpace(filtro.Leyenda))
@@ -67,7 +139,43 @@ public class AsientoService(
         // La marca de anulado vive en el detalle, no en la cabecera: un asiento esta anulado
         // cuando todos sus renglones lo estan. El filtro va en la consulta y no en memoria,
         // porque aplicarlo despues de paginar recorta la pagina pero deja el total sin tocar.
-        if (filtro.Anulados is not null)
+        var estadoFiltro = filtro.Estado?.Trim();
+        if (!string.IsNullOrWhiteSpace(estadoFiltro) &&
+            !string.Equals(estadoFiltro, "Todos", StringComparison.OrdinalIgnoreCase))
+        {
+            if (estadoFiltro.StartsWith("Vigente", StringComparison.OrdinalIgnoreCase))
+            {
+                consulta = consulta.Where(a =>
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento) == 0 ||
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento && d.Anulado == Anulado) <
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento));
+            }
+            else if (estadoFiltro.StartsWith("Reversado", StringComparison.OrdinalIgnoreCase))
+            {
+                consulta = consulta.Where(a =>
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento) > 0 &&
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento && d.Anulado == Anulado) ==
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento) &&
+                    ((a.Leyenda != null && a.Leyenda.ToUpper().StartsWith("REVERSA ASIENTO ")) ||
+                     _ejecucionContext.TAsientos.Count(x =>
+                         x.IdAsientoRel == a.IdAsiento &&
+                         x.Leyenda != null &&
+                         x.Leyenda.ToUpper().StartsWith("REVERSA ASIENTO ")) > 0));
+            }
+            else if (estadoFiltro.StartsWith("Anulado", StringComparison.OrdinalIgnoreCase))
+            {
+                consulta = consulta.Where(a =>
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento) > 0 &&
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento && d.Anulado == Anulado) ==
+                    _ejecucionContext.TAsientosDetalle.Count(d => d.IdAsiento == a.IdAsiento) &&
+                    (a.Leyenda == null || !a.Leyenda.ToUpper().StartsWith("REVERSA ASIENTO ")) &&
+                    _ejecucionContext.TAsientos.Count(x =>
+                        x.IdAsientoRel == a.IdAsiento &&
+                        x.Leyenda != null &&
+                        x.Leyenda.ToUpper().StartsWith("REVERSA ASIENTO ")) == 0);
+            }
+        }
+        else if (filtro.Anulados is not null)
         {
             consulta = filtro.Anulados.Value
                 ? consulta.Where(a =>
@@ -83,17 +191,18 @@ public class AsientoService(
         var total = await consulta.CountAsync();
 
         // Los totales del asiento se resuelven en la misma consulta que la pagina, con
-        // subconsultas escalares. Traer todos los renglones para sumarlos en memoria costaba
-        // tres viajes de ida y vuelta mas, y contra una base en otro continente cada viaje son
-        // casi doscientos milisegundos.
+        // subconsultas escalares.
         var pagina0 = await consulta
-            .OrderByDescending(a => a.FecContable)
-            .ThenByDescending(a => a.Numero)
+            .OrderByDescending(a => a.Numero)
             .Skip((pagina - 1) * tamano)
             .Take(tamano)
             .Select(a => new
             {
                 Asiento = a,
+                TipoCodigo = _ejecucionContext.TTiposAsiento
+                    .Where(t => t.IdTipoAsiento == a.IdTipoAsiento)
+                    .Select(t => t.Codigo)
+                    .FirstOrDefault(),
                 TipoAsiento = _ejecucionContext.TTiposAsiento
                     .Where(t => t.IdTipoAsiento == a.IdTipoAsiento)
                     .Select(t => t.Descripcion)
@@ -108,28 +217,40 @@ public class AsientoService(
                     .Count(d => d.IdAsiento == a.IdAsiento && d.Anulado == Anulado),
                 Contrapartidas = _ejecucionContext.TAsientos
                     .Count(x => x.IdAsientoRel == a.IdAsiento),
+                ContrapartidasReversa = _ejecucionContext.TAsientos
+                    .Count(x => x.IdAsientoRel == a.IdAsiento && x.Leyenda != null && x.Leyenda.ToUpper().StartsWith("REVERSA ASIENTO ")),
             })
             .ToListAsync();
 
         var resumen = pagina0
-            .Select(x => new AsientoResumenResponse
+            .Select(x =>
             {
-                IdAsiento = x.Asiento.IdAsiento,
-                Numero = x.Asiento.Numero,
-                Anio = x.Asiento.Anio,
-                FecContable = x.Asiento.FecContable,
-                Leyenda = x.Asiento.Leyenda,
-                IdTipoAsiento = x.Asiento.IdTipoAsiento,
-                TipoAsiento = x.TipoAsiento,
-                IdJurisdiccion = x.Asiento.IdJurisdiccion,
-                IdAsientoRel = x.Asiento.IdAsientoRel,
-                TieneContrapartida = x.Contrapartidas > 0,
-                UserAlta = x.Asiento.UserAlta,
-                FecAlta = x.Asiento.FecAlta,
-                CantidadDeRenglones = x.Renglones,
-                TotalDebe = ReglasBalanceAsiento.Redondear(x.TotalDebe),
-                TotalHaber = ReglasBalanceAsiento.Redondear(x.TotalHaber),
-                Anulado = x.Renglones > 0 && x.RenglonesAnulados == x.Renglones,
+                var anulado = x.Renglones > 0 && x.RenglonesAnulados == x.Renglones;
+                var esReversado = anulado && (x.ContrapartidasReversa > 0 ||
+                    (x.Asiento.Leyenda?.StartsWith("REVERSA ASIENTO ", StringComparison.OrdinalIgnoreCase) ?? false));
+
+                return new AsientoResumenResponse
+                {
+                    IdAsiento = x.Asiento.IdAsiento,
+                    Numero = x.Asiento.Numero,
+                    Anio = x.Asiento.Anio,
+                    FecContable = x.Asiento.FecContable,
+                    Leyenda = x.Asiento.Leyenda,
+                    IdTipoAsiento = x.Asiento.IdTipoAsiento,
+                    CodigoTipoAsiento = x.TipoCodigo,
+                    TipoAsiento = x.TipoAsiento,
+                    EsManual = ReglasAsiento.EsTipoManual(x.TipoCodigo, x.TipoAsiento),
+                    IdJurisdiccion = x.Asiento.IdJurisdiccion,
+                    IdAsientoRel = x.Asiento.IdAsientoRel,
+                    TieneContrapartida = x.Contrapartidas > 0,
+                    UserAlta = x.Asiento.UserAlta,
+                    FecAlta = x.Asiento.FecAlta,
+                    CantidadDeRenglones = x.Renglones,
+                    TotalDebe = ReglasBalanceAsiento.Redondear(x.TotalDebe),
+                    TotalHaber = ReglasBalanceAsiento.Redondear(x.TotalHaber),
+                    Anulado = anulado,
+                    Reversado = esReversado,
+                };
             })
             .ToList();
 
@@ -168,8 +289,14 @@ public class AsientoService(
         var tipo = await _ejecucionContext.TTiposAsiento
             .AsNoTracking()
             .Where(t => t.IdTipoAsiento == asiento.IdTipoAsiento)
-            .Select(t => t.Descripcion)
+            .Select(t => new { t.Codigo, t.Descripcion })
             .FirstOrDefaultAsync();
+
+        var anulado = renglones.Count > 0 && renglones.All(r => r.Anulado == Anulado);
+        var tieneContrapartidaReversa = await Existe(_ejecucionContext.TAsientos.Where(a =>
+            a.IdAsientoRel == idAsiento && a.Leyenda != null && a.Leyenda.ToUpper().StartsWith("REVERSA ASIENTO ")));
+        var reversado = anulado && (tieneContrapartidaReversa ||
+            (asiento.Leyenda?.StartsWith("REVERSA ASIENTO ", StringComparison.OrdinalIgnoreCase) ?? false));
 
         var respuesta = new AsientoResponse
         {
@@ -182,7 +309,9 @@ public class AsientoService(
             Leyenda = asiento.Leyenda,
             Observaciones = asiento.Observaciones,
             IdTipoAsiento = asiento.IdTipoAsiento,
-            TipoAsiento = tipo,
+            CodigoTipoAsiento = tipo?.Codigo,
+            TipoAsiento = tipo?.Descripcion,
+            EsManual = ReglasAsiento.EsTipoManual(tipo?.Codigo, tipo?.Descripcion),
             IdAsientoRel = asiento.IdAsientoRel,
             TieneContrapartida = await Existe(_ejecucionContext.TAsientos.Where(a => a.IdAsientoRel == idAsiento)),
             UserAlta = asiento.UserAlta,
@@ -191,7 +320,8 @@ public class AsientoService(
             TotalHaber = ReglasBalanceAsiento.TotalHaber(comoRenglones),
             Cuadra = ReglasBalanceAsiento.Cuadra(comoRenglones),
             CantidadDeRenglones = renglones.Count,
-            Anulado = renglones.Count > 0 && renglones.All(r => r.Anulado == Anulado),
+            Anulado = anulado,
+            Reversado = reversado,
             Renglones =
             [
                 .. renglones.Select(r => new RenglonResponse

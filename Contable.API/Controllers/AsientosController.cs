@@ -12,6 +12,12 @@ public class AsientosController(IAsientoService servicio) : BaseController
 {
     private readonly IAsientoService _servicio = servicio;
 
+    /// <summary>Grilla paginada vía GET. Sin ejercicio ni jurisdiccion explicitos usa los del token.</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(OperationResponse<List<AsientoResumenResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> BuscarGet([FromQuery] FiltroAsientosRequest filtro)
+        => Return(await _servicio.Buscar(filtro));
+
     /// <summary>Grilla paginada. Sin ejercicio ni jurisdiccion explicitos usa los del token.</summary>
     [HttpPost("Buscar")]
     [ProducesResponseType(typeof(OperationResponse<List<AsientoResumenResponse>>), StatusCodes.Status200OK)]
