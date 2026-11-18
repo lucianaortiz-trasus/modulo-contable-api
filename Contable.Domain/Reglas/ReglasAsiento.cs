@@ -82,6 +82,47 @@ public static class ReglasAsiento
 
         return validacion;
     }
+
+    /// <summary>Valida los criterios de filtro para la consulta de asientos (T.16416).</summary>
+    public static Validacion ValidarFiltroConsulta(
+        DateTime? fechaDesde,
+        DateTime? fechaHasta,
+        int? numero = null,
+        string? leyenda = null)
+    {
+        var validacion = new Validacion();
+
+        if (fechaDesde is not null && fechaHasta is not null)
+        {
+            var desde = fechaDesde.Value.Date;
+            var hasta = fechaHasta.Value.Date;
+
+            validacion.AgregarSi(
+                desde > hasta,
+                "La fecha desde no puede ser posterior a la fecha hasta.");
+
+            validacion.AgregarSi(
+                hasta > desde.AddYears(1),
+                "El rango de fechas no puede superar 1 año.");
+        }
+
+        validacion.AgregarSi(
+            numero is < 0 or > 99999999,
+            "El número de asiento debe tener hasta 8 dígitos.");
+
+        validacion.AgregarSi(
+            leyenda is not null && leyenda.Length > 100,
+            "La leyenda de búsqueda no puede superar los 100 caracteres.");
+
+        return validacion;
+    }
+
+    public static bool EsTipoManual(string? codigo, string? descripcion)
+        => (!string.IsNullOrWhiteSpace(codigo) && codigo.StartsWith("AM", StringComparison.OrdinalIgnoreCase))
+           || (!string.IsNullOrWhiteSpace(descripcion) && descripcion.Contains("MANUAL", StringComparison.OrdinalIgnoreCase));
+
+    public static string EstadoDe(bool anulado, bool reversado)
+        => !anulado ? "Vigente" : (reversado ? "Reversado" : "Anulado");
 }
 
 /// <summary>

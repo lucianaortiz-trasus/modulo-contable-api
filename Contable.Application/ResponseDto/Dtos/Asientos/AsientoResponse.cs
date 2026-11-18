@@ -15,7 +15,13 @@ public class AsientoResumenResponse
 
     public int IdTipoAsiento { get; set; }
 
+    public string? CodigoTipoAsiento { get; set; }
+
     public string? TipoAsiento { get; set; }
+
+    public bool EsManual { get; set; }
+
+    public string TipoClasificacion => EsManual ? "Manual" : "Automático";
 
     public decimal TotalDebe { get; set; }
 
@@ -25,6 +31,11 @@ public class AsientoResumenResponse
 
     /// <summary>Todos los renglones estan marcados como anulados.</summary>
     public bool Anulado { get; set; }
+
+    /// <summary>Indica si el asiento fue reversado.</summary>
+    public bool Reversado { get; set; }
+
+    public string Estado => !Anulado ? "Vigente" : (Reversado ? "Reversado" : "Anulado");
 
     /// <summary>Asiento de origen, cuando este es una reversa o un contraasiento.</summary>
     public int? IdAsientoRel { get; set; }

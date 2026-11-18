@@ -114,4 +114,46 @@ public class ReglasAsientoTests
         // El maximo de la jurisdiccion es lo unico que importa, venga del ejercicio que venga.
         ReglasNumeracionAsiento.ProximoNumero(1200).Should().Be(1201);
     }
+
+    [Fact]
+    public void ValidarFiltroConsulta_RechazaRangoMayorAUnAnio()
+    {
+        var validacion = ReglasAsiento.ValidarFiltroConsulta(
+            new DateTime(2025, 1, 1),
+            new DateTime(2026, 1, 2));
+
+        validacion.EsValida.Should().BeFalse();
+        validacion.Errores.Should().Contain(e => e.Contains("1 año"));
+    }
+
+    [Fact]
+    public void ValidarFiltroConsulta_AceptaRangoHastaUnAnio()
+    {
+        var validacion = ReglasAsiento.ValidarFiltroConsulta(
+            new DateTime(2025, 1, 1),
+            new DateTime(2026, 1, 1),
+            numero: 1530,
+            leyenda: "dev");
+
+        validacion.EsValida.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidarFiltroConsulta_RechazaNumeroMayorAOchoDigitos()
+    {
+        var validacion = ReglasAsiento.ValidarFiltroConsulta(null, null, numero: 123456789);
+        validacion.EsValida.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ClasificacionManualYEstado_SeResuelvenCorrectamente()
+    {
+        ReglasAsiento.EsTipoManual("AM", "MANUAL").Should().BeTrue();
+        ReglasAsiento.EsTipoManual("AMR", "MANUAL REVERSABLE").Should().BeTrue();
+        ReglasAsiento.EsTipoManual("AP", "AUTOMATICO PURO").Should().BeFalse();
+
+        ReglasAsiento.EstadoDe(anulado: false, reversado: false).Should().Be("Vigente");
+        ReglasAsiento.EstadoDe(anulado: true, reversado: false).Should().Be("Anulado");
+        ReglasAsiento.EstadoDe(anulado: true, reversado: true).Should().Be("Reversado");
+    }
 }
