@@ -68,6 +68,7 @@ public static class ServicesConfig
         services.AddScoped<IReportesService, ReportesService>();
         services.AddScoped<IEstadisticasService, EstadisticasService>();
         services.AddScoped<IAuditoriaService, AuditoriaService>();
+        services.AddScoped<IModelosAsientoService, ModelosAsientoService>();
     }
 
     private static void AddSwagger(this IServiceCollection services)
