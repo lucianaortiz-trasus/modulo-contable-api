@@ -15,6 +15,22 @@ public class EjecucionContext(DbContextOptions<EjecucionContext> options) : DbCo
 
     public virtual DbSet<TMatrizContable> TMatrizContable { get; set; }
 
+    public virtual DbSet<TPlantillaAsiento> TPlantillasAsiento { get; set; }
+
+    public virtual DbSet<TPlantillaAsientoDetalle> TPlantillasAsientoDetalle { get; set; }
+
+    public virtual DbSet<TModeloAsiento> TModelosAsiento { get; set; }
+
+    public virtual DbSet<TModeloAsientoDetalle> TModelosAsientoDetalle { get; set; }
+
+    public virtual DbSet<THistorialModeloAsiento> THistorialesModelosAsiento { get; set; }
+
+    public virtual DbSet<TTipoOperacionAsiento> TTiposOperacionAsiento { get; set; }
+
+    public virtual DbSet<TTipoDocumento> TTiposDocumento { get; set; }
+
+    public virtual DbSet<TTipoDocumentoLetra> TTiposDocumentoLetra { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder
@@ -182,6 +198,213 @@ public class EjecucionContext(DbContextOptions<EjecucionContext> options) : DbCo
                 .WithMany()
                 .HasForeignKey(e => e.IdCtaContable)
                 .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<TTipoOperacionAsiento>(entity =>
+        {
+            entity.ToTable("T_TIPOS_OPERACION_ASIENTO");
+            entity.HasKey(e => e.IdTipoOperacion);
+
+            entity.Property(e => e.IdTipoOperacion).HasColumnName("ID_TIPO_OPERACION").ValueGeneratedNever();
+            entity.Property(e => e.Codigo).HasColumnName("CODIGO").HasMaxLength(30);
+            entity.Property(e => e.NTipoOperacion).HasColumnName("N_TIPO_OPERACION").HasMaxLength(100);
+            entity.Property(e => e.Descripcion).HasColumnName("DESCRIPCION").HasMaxLength(200);
+            entity.Property(e => e.Orden).HasColumnName("ORDEN");
+            entity.Property(e => e.UsrIng).HasColumnName("USR_ING").HasMaxLength(50);
+            entity.Property(e => e.FecIng).HasColumnName("FEC_ING");
+            entity.Property(e => e.UsrMod).HasColumnName("USR_MOD").HasMaxLength(50);
+            entity.Property(e => e.FecMod).HasColumnName("FEC_MOD");
+            entity.Property(e => e.UsrBaja).HasColumnName("USR_BAJA").HasMaxLength(50);
+            entity.Property(e => e.FecBaja).HasColumnName("FEC_BAJA");
+
+            entity.HasIndex(e => e.FecBaja);
+        });
+
+        modelBuilder.Entity<TTipoDocumento>(entity =>
+        {
+            entity.ToTable("T_TIPODOC");
+            entity.HasKey(e => e.IdTipodoc);
+
+            entity.Property(e => e.IdTipodoc).HasColumnName("ID_TIPODOC").ValueGeneratedNever();
+            entity.Property(e => e.Codigo).HasColumnName("CODIGO");
+            entity.Property(e => e.Descripcion).HasColumnName("DESCRIPCION").HasMaxLength(100);
+            entity.Property(e => e.Baja).HasColumnName("BAJA").HasMaxLength(1);
+            entity.Property(e => e.IdTipoComprobante).HasColumnName("ID_TIPO_COMPROBANTE");
+            entity.Property(e => e.FechaHasta).HasColumnName("FECHA_HASTA");
+            entity.Property(e => e.IdEtapa).HasColumnName("ID_ETAPA");
+            entity.Property(e => e.UsrAlta).HasColumnName("USR_ALTA").HasMaxLength(50);
+            entity.Property(e => e.FecAlta).HasColumnName("FEC_ALTA");
+            entity.Property(e => e.UsrModif).HasColumnName("USR_MODIF").HasMaxLength(50);
+            entity.Property(e => e.FecModif).HasColumnName("FEC_MODIF");
+        });
+
+        modelBuilder.Entity<TTipoDocumentoLetra>(entity =>
+        {
+            entity.ToTable("T_TIPODOC_LETRA");
+            entity.HasKey(e => e.IdTipodocLetra);
+
+            entity.Property(e => e.IdTipodocLetra).HasColumnName("ID_TIPODOC_LETRA").ValueGeneratedNever();
+            entity.Property(e => e.IdTipoDoc).HasColumnName("ID_TIPO_DOC");
+            entity.Property(e => e.Codigo).HasColumnName("CODIGO").HasMaxLength(1);
+            entity.Property(e => e.Activo).HasColumnName("ACTIVO");
+            entity.Property(e => e.FecBaja).HasColumnName("FEC_BAJA");
+            entity.Property(e => e.UsrBaja).HasColumnName("USR_BAJA").HasMaxLength(50);
+            entity.Property(e => e.UsrIng).HasColumnName("USR_ING").HasMaxLength(50);
+            entity.Property(e => e.FecIng).HasColumnName("FEC_ING");
+            entity.Property(e => e.UsrMod).HasColumnName("USR_MOD").HasMaxLength(50);
+            entity.Property(e => e.FecMod).HasColumnName("FEC_MOD");
+
+            entity.HasOne(e => e.Documento)
+                .WithMany(d => d.Letras)
+                .HasForeignKey(e => e.IdTipoDoc)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<TPlantillaAsiento>(entity =>
+        {
+            entity.ToTable("T_PLANTILLAS_ASIENTO");
+            entity.HasKey(e => e.IdPlantillaAsiento);
+
+            entity.Property(e => e.IdPlantillaAsiento).HasColumnName("ID_PLANTILLA_ASIENTO").ValueGeneratedNever();
+            entity.Property(e => e.IdTipoOperacion).HasColumnName("ID_TIPO_OPERACION");
+            entity.Property(e => e.IdTipodoc).HasColumnName("ID_TIPODOC");
+            entity.Property(e => e.IdTipodocLetra).HasColumnName("ID_TIPODOC_LETRA");
+            entity.Property(e => e.DiscriminaOt).HasColumnName("DISCRIMINA_OT").HasMaxLength(1);
+            entity.Property(e => e.UsrIng).HasColumnName("USR_ING").HasMaxLength(50);
+            entity.Property(e => e.FecIng).HasColumnName("FEC_ING");
+            entity.Property(e => e.UsrMod).HasColumnName("USR_MOD").HasMaxLength(50);
+            entity.Property(e => e.FecMod).HasColumnName("FEC_MOD");
+            entity.Property(e => e.UsrBaja).HasColumnName("USR_BAJA").HasMaxLength(50);
+            entity.Property(e => e.FecBaja).HasColumnName("FEC_BAJA");
+
+            entity.HasOne(e => e.TipoOperacion)
+                .WithMany(o => o.Plantillas)
+                .HasForeignKey(e => e.IdTipoOperacion)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.TipoDocumento)
+                .WithMany()
+                .HasForeignKey(e => e.IdTipodoc)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.TipoDocumentoLetra)
+                .WithMany()
+                .HasForeignKey(e => e.IdTipodocLetra)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(e => e.Renglones)
+                .WithOne(d => d.Plantilla)
+                .HasForeignKey(d => d.IdPlantillaAsiento)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => e.IdTipoOperacion);
+            entity.HasIndex(e => e.IdTipodoc);
+            entity.HasIndex(e => e.IdTipodocLetra);
+        });
+
+        modelBuilder.Entity<TPlantillaAsientoDetalle>(entity =>
+        {
+            entity.ToTable("T_PLANTILLAS_ASIENTO_DET");
+            entity.HasKey(e => e.IdPlantillaAsientoDetalle);
+
+            entity.Property(e => e.IdPlantillaAsientoDetalle).HasColumnName("ID_PLANTILLA_ASIENTO_DET").ValueGeneratedNever();
+            entity.Property(e => e.IdPlantillaAsiento).HasColumnName("ID_PLANTILLA_ASIENTO");
+            entity.Property(e => e.Orden).HasColumnName("ORDEN");
+            entity.Property(e => e.OrigenCuenta).HasColumnName("ORIGEN_CUENTA").HasMaxLength(20);
+            entity.Property(e => e.Concepto).HasColumnName("CONCEPTO").HasMaxLength(200);
+            entity.Property(e => e.Debita).HasColumnName("DEBITA").HasMaxLength(1);
+            entity.Property(e => e.Acredita).HasColumnName("ACREDITA").HasMaxLength(1);
+            entity.Property(e => e.BaseCalculo).HasColumnName("BASE_CALCULO").HasMaxLength(200);
+            entity.Property(e => e.UsrIng).HasColumnName("USR_ING").HasMaxLength(50);
+            entity.Property(e => e.FecIng).HasColumnName("FEC_ING");
+            entity.Property(e => e.UsrMod).HasColumnName("USR_MOD").HasMaxLength(50);
+            entity.Property(e => e.FecMod).HasColumnName("FEC_MOD");
+            entity.Property(e => e.UsrBaja).HasColumnName("USR_BAJA").HasMaxLength(50);
+            entity.Property(e => e.FecBaja).HasColumnName("FEC_BAJA");
+
+            entity.HasIndex(e => new { e.IdPlantillaAsiento, e.Orden }).IsUnique();
+        });
+
+        modelBuilder.Entity<TModeloAsiento>(entity =>
+        {
+            entity.ToTable("T_MODELOS_ASIENTO");
+            entity.HasKey(e => e.IdModeloAsiento);
+
+            entity.Property(e => e.IdModeloAsiento).HasColumnName("ID_MODELO_ASIENTO").ValueGeneratedNever();
+            entity.Property(e => e.IdPlantillaAsiento).HasColumnName("ID_PLANTILLA_ASIENTO");
+            entity.Property(e => e.UsrIng).HasColumnName("USR_ING").HasMaxLength(50);
+            entity.Property(e => e.FecIng).HasColumnName("FEC_ING");
+            entity.Property(e => e.UsrMod).HasColumnName("USR_MOD").HasMaxLength(50);
+            entity.Property(e => e.FecMod).HasColumnName("FEC_MOD");
+            entity.Property(e => e.UsrBaja).HasColumnName("USR_BAJA").HasMaxLength(50);
+            entity.Property(e => e.FecBaja).HasColumnName("FEC_BAJA");
+
+            entity.HasOne(e => e.Plantilla)
+                .WithMany()
+                .HasForeignKey(e => e.IdPlantillaAsiento)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(e => e.Detalles)
+                .WithOne(d => d.Modelo)
+                .HasForeignKey(d => d.IdModeloAsiento)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasMany(e => e.Historial)
+                .WithOne(h => h.Modelo)
+                .HasForeignKey(h => h.IdModeloAsiento)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => e.IdPlantillaAsiento);
+        });
+
+        modelBuilder.Entity<TModeloAsientoDetalle>(entity =>
+        {
+            entity.ToTable("T_MODELOS_ASIENTO_DET");
+            entity.HasKey(e => e.IdModeloAsientoDetalle);
+
+            entity.Property(e => e.IdModeloAsientoDetalle).HasColumnName("ID_MODELO_ASIENTO_DET").ValueGeneratedNever();
+            entity.Property(e => e.IdModeloAsiento).HasColumnName("ID_MODELO_ASIENTO");
+            entity.Property(e => e.IdPlantillaAsientoDetalle).HasColumnName("ID_PLANTILLA_ASIENTO_DET");
+            entity.Property(e => e.IdCtaContable).HasColumnName("ID_CTA_CONTABLE");
+            entity.Property(e => e.UsrIng).HasColumnName("USR_ING").HasMaxLength(50);
+            entity.Property(e => e.FecIng).HasColumnName("FEC_ING");
+            entity.Property(e => e.UsrMod).HasColumnName("USR_MOD").HasMaxLength(50);
+            entity.Property(e => e.FecMod).HasColumnName("FEC_MOD");
+            entity.Property(e => e.UsrBaja).HasColumnName("USR_BAJA").HasMaxLength(50);
+            entity.Property(e => e.FecBaja).HasColumnName("FEC_BAJA");
+
+            entity.HasOne(e => e.RenglonPlantilla)
+                .WithMany()
+                .HasForeignKey(e => e.IdPlantillaAsientoDetalle)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.CuentaContable)
+                .WithMany()
+                .HasForeignKey(e => e.IdCtaContable)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => new { e.IdModeloAsiento, e.IdPlantillaAsientoDetalle }).IsUnique();
+            entity.HasIndex(e => e.IdPlantillaAsientoDetalle);
+            entity.HasIndex(e => e.IdCtaContable);
+        });
+
+        modelBuilder.Entity<THistorialModeloAsiento>(entity =>
+        {
+            entity.ToTable("T_HISTORIALES_MODELOS_ASIENTO");
+            entity.HasKey(e => e.IdHistorialModeloAsiento);
+
+            entity.Property(e => e.IdHistorialModeloAsiento).HasColumnName("ID_HISTORIAL_MODELO_ASIENTO").ValueGeneratedNever();
+            entity.Property(e => e.IdModeloAsiento).HasColumnName("ID_MODELO_ASIENTO");
+            entity.Property(e => e.Accion).HasColumnName("ACCION").HasMaxLength(20);
+            entity.Property(e => e.Comentarios).HasColumnName("COMENTARIOS").HasColumnType("VARCHAR2(4000)");
+            entity.Property(e => e.UsrIng).HasColumnName("USR_ING").HasMaxLength(50);
+            entity.Property(e => e.FecIng).HasColumnName("FEC_ING");
+            entity.Property(e => e.UsrMod).HasColumnName("USR_MOD").HasMaxLength(50);
+            entity.Property(e => e.FecMod).HasColumnName("FEC_MOD");
+            entity.Property(e => e.UsrBaja).HasColumnName("USR_BAJA").HasMaxLength(50);
+            entity.Property(e => e.FecBaja).HasColumnName("FEC_BAJA");
+
+            entity.HasIndex(e => e.IdModeloAsiento);
         });
     }
 }
