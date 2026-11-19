@@ -31,20 +31,45 @@ public class PlanDeCuentasService(
 
     private const string Inactiva = ReglasJerarquiaCuentas.CuentaInactiva;
 
-    public async Task<OperationResponse<ArbolPlanDeCuentasResponse>> GetArbol(bool incluirInactivas)
+    public async Task<OperationResponse<ArbolPlanDeCuentasResponse>> GetArbol(
+        bool incluirInactivas,
+        string? codigo = null,
+        string? nombre = null,
+        string? tipoSaldo = null,
+        string? estado = null)
     {
+        var traerTodas = incluirInactivas ||
+            string.Equals(estado, "Todas", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(estado, "Inactivas", StringComparison.OrdinalIgnoreCase);
+
         var cuentas = await ConsultaBase()
-            .Where(c => incluirInactivas || c.Activa == Activa)
+            .Where(c => traerTodas || c.Activa == Activa)
             .ToListAsync();
 
         var propias = cuentas.Count;
         var deContexto = await CompletarAncestros(cuentas);
 
         var arbol = ArbolDeCuentas.Armar(cuentas);
+        var raices = arbol.Raices.Select(nodo => MapearNodo(nodo, deContexto)).ToList();
+
+        var codigoFiltro = codigo?.Trim();
+        var nombreFiltro = nombre?.Trim();
+        var saldoFiltro = NormalizarFiltroSaldo(tipoSaldo);
+        var estadoFiltro = estado?.Trim();
+
+        var hayFiltro = !string.IsNullOrEmpty(codigoFiltro)
+            || !string.IsNullOrEmpty(nombreFiltro)
+            || !string.IsNullOrEmpty(saldoFiltro)
+            || (!string.IsNullOrEmpty(estadoFiltro) && !string.Equals(estadoFiltro, "Todas", StringComparison.OrdinalIgnoreCase) && traerTodas);
+
+        if (hayFiltro)
+        {
+            raices = FiltrarNodosArbol(raices, codigoFiltro, nombreFiltro, saldoFiltro, estadoFiltro);
+        }
 
         var respuesta = new ArbolPlanDeCuentasResponse
         {
-            Raices = [.. arbol.Raices.Select(nodo => MapearNodo(nodo, deContexto))],
+            Raices = raices,
             TotalCuentas = propias,
             CuentasDeContexto = deContexto.Count,
             TotalImputables = cuentas.Count(c => c.EsImputable && !deContexto.Contains(c.IdCtaContable)),
@@ -63,6 +88,56 @@ public class PlanDeCuentasService(
         };
 
         return Ok(respuesta);
+    }
+
+    private static string? NormalizarFiltroSaldo(string? tipoSaldo)
+    {
+        if (string.IsNullOrWhiteSpace(tipoSaldo) || string.Equals(tipoSaldo, "Todos", StringComparison.OrdinalIgnoreCase))
+            return null;
+        if (string.Equals(tipoSaldo, "Deudor", StringComparison.OrdinalIgnoreCase) || string.Equals(tipoSaldo, "D", StringComparison.OrdinalIgnoreCase))
+            return "D";
+        if (string.Equals(tipoSaldo, "Acreedor", StringComparison.OrdinalIgnoreCase) || string.Equals(tipoSaldo, "A", StringComparison.OrdinalIgnoreCase))
+            return "A";
+        return null;
+    }
+
+    private static List<CuentaArbolResponse> FiltrarNodosArbol(
+        List<CuentaArbolResponse> nodos,
+        string? codigo,
+        string? nombre,
+        string? tipoSaldo,
+        string? estado)
+    {
+        var resultado = new List<CuentaArbolResponse>();
+
+        foreach (var nodo in nodos)
+        {
+            var hijasFiltradas = FiltrarNodosArbol(nodo.Hijas, codigo, nombre, tipoSaldo, estado);
+
+            var coincideCodigo = string.IsNullOrEmpty(codigo) ||
+                nodo.Codigo.Contains(codigo, StringComparison.OrdinalIgnoreCase);
+
+            var coincideNombre = string.IsNullOrEmpty(nombre) ||
+                nodo.Nombre.Contains(nombre, StringComparison.OrdinalIgnoreCase);
+
+            var coincideSaldo = string.IsNullOrEmpty(tipoSaldo) ||
+                string.Equals(nodo.TipoSaldo, tipoSaldo, StringComparison.OrdinalIgnoreCase);
+
+            var coincideEstado = string.IsNullOrEmpty(estado) ||
+                string.Equals(estado, "Todas", StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(estado, "Activas", StringComparison.OrdinalIgnoreCase) && nodo.Activa) ||
+                (string.Equals(estado, "Inactivas", StringComparison.OrdinalIgnoreCase) && !nodo.Activa);
+
+            var coincideNodo = coincideCodigo && coincideNombre && coincideSaldo && coincideEstado;
+
+            if (coincideNodo || hijasFiltradas.Count > 0)
+            {
+                nodo.Hijas = hijasFiltradas;
+                resultado.Add(nodo);
+            }
+        }
+
+        return resultado;
     }
 
     public async Task<OperationResponse<List<CuentaContableResponse>>> Buscar(FiltroCuentasRequest filtro)
@@ -121,7 +196,18 @@ public class PlanDeCuentasService(
 
         var respuesta = Mapear(cuenta, await ContarHijas(idCtaContable));
         respuesta.TieneMovimientos = await TieneMovimientos(idCtaContable);
-        respuesta.CodigoPadre = await CodigoDe(cuenta.IdCtaContableRel);
+
+        if (cuenta.IdCtaContableRel is not null)
+        {
+            var padre = await _ejecucionContext.TCuentasContables
+                .AsNoTracking()
+                .Where(c => c.IdCtaContable == cuenta.IdCtaContableRel)
+                .Select(c => new { c.Codigo, c.Nombre })
+                .FirstOrDefaultAsync();
+
+            respuesta.CodigoPadre = padre?.Codigo;
+            respuesta.NombrePadre = padre?.Nombre;
+        }
 
         return Ok(respuesta);
     }

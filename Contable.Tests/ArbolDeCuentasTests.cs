@@ -189,4 +189,30 @@ public class ArbolDeCuentasTests
 
         enElArbol.Should().BeEquivalentTo(cuentas.Select(c => c.Id));
     }
+
+    [Fact]
+    public void CuentaContableResponse_ResuelveCuentaSuperiorYNaturaleza()
+    {
+        var resp = new Contable.Application.ResponseDto.Dtos.PlanDeCuentas.CuentaContableResponse
+        {
+            Codigo = "02.01.01.02",
+            Nombre = "Acreedores Varios",
+            CodigoPadre = "02.01.01",
+            NombrePadre = "Deudas Comerciales",
+            IdNaturaleza = 2,
+        };
+
+        resp.CuentaSuperior.Should().Be("02.01.01 Deudas Comerciales");
+        resp.Naturaleza.Should().Be("PASIVO");
+
+        var raiz = new Contable.Application.ResponseDto.Dtos.PlanDeCuentas.CuentaContableResponse
+        {
+            Codigo = "1",
+            Nombre = "ACTIVO",
+            IdNaturaleza = null,
+        };
+
+        raiz.CuentaSuperior.Should().Be("No posee");
+        raiz.Naturaleza.Should().Be("ACTIVO");
+    }
 }

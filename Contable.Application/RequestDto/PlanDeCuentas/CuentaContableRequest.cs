@@ -62,6 +62,12 @@ public class FiltroCuentasRequest
 
     public bool? Activa { get; set; }
 
+    /// <summary>'D' (Deudor), 'A' (Acreedor) o 'Todos'.</summary>
+    public string? TipoSaldo { get; set; }
+
+    /// <summary>'Activas', 'Inactivas' o 'Todas'.</summary>
+    public string? Estado { get; set; }
+
     public int? IdNaturaleza { get; set; }
 
     public int Pagina { get; set; } = 1;

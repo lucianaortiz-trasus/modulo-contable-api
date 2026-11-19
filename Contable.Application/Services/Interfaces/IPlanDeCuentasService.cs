@@ -5,8 +5,13 @@ namespace Contable.Application.Services.Interfaces;
 
 public interface IPlanDeCuentasService
 {
-    /// <summary>Arbol completo del plan, con las anomalias estructurales detectadas.</summary>
-    Task<OperationResponse<ArbolPlanDeCuentasResponse>> GetArbol(bool incluirInactivas);
+    /// <summary>Arbol completo del plan, con las anomalias estructurales detectadas y soporte de filtros.</summary>
+    Task<OperationResponse<ArbolPlanDeCuentasResponse>> GetArbol(
+        bool incluirInactivas,
+        string? codigo = null,
+        string? nombre = null,
+        string? tipoSaldo = null,
+        string? estado = null);
 
     /// <summary>Busqueda paginada para la grilla.</summary>
     Task<OperationResponse<List<CuentaContableResponse>>> Buscar(FiltroCuentasRequest filtro);

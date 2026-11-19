@@ -13,13 +13,31 @@ public class PlanDeCuentasController(IPlanDeCuentasService servicio) : BaseContr
     private readonly IPlanDeCuentasService _servicio = servicio;
 
     /// <summary>
+    /// Arbol completo del plan (vía GET /api/PlanDeCuentas), con soporte de filtros jerárquicos (T.16455).
+    /// </summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(OperationResponse<ArbolPlanDeCuentasResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Get(
+        [FromQuery] string? codigo = null,
+        [FromQuery] string? nombre = null,
+        [FromQuery] string? tipoSaldo = null,
+        [FromQuery] string? estado = null,
+        [FromQuery] bool incluirInactivas = false)
+        => Return(await _servicio.GetArbol(incluirInactivas, codigo, nombre, tipoSaldo, estado));
+
+    /// <summary>
     /// Arbol completo del plan, con el detalle de las cuentas que tienen problemas estructurales.
     /// </summary>
     /// <param name="incluirInactivas">Si se muestran tambien las cuentas dadas de baja.</param>
     [HttpGet("Arbol")]
     [ProducesResponseType(typeof(OperationResponse<ArbolPlanDeCuentasResponse>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetArbol([FromQuery] bool incluirInactivas = false)
-        => Return(await _servicio.GetArbol(incluirInactivas));
+    public async Task<IActionResult> GetArbol(
+        [FromQuery] bool incluirInactivas = false,
+        [FromQuery] string? codigo = null,
+        [FromQuery] string? nombre = null,
+        [FromQuery] string? tipoSaldo = null,
+        [FromQuery] string? estado = null)
+        => Return(await _servicio.GetArbol(incluirInactivas, codigo, nombre, tipoSaldo, estado));
 
     /// <summary>Busqueda paginada para la grilla.</summary>
     [HttpPost("Buscar")]

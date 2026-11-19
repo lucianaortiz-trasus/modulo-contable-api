@@ -9,6 +9,12 @@ public class CuentaContableResponse
 
     public string? CodigoPadre { get; set; }
 
+    public string? NombrePadre { get; set; }
+
+    public string CuentaSuperior => string.IsNullOrWhiteSpace(CodigoPadre)
+        ? "No posee"
+        : $"{CodigoPadre} {NombrePadre}".Trim();
+
     public string Codigo { get; set; } = string.Empty;
 
     /// <summary>Codigo con los segmentos completados con ceros. Es el que sirve para ordenar.</summary>
@@ -29,6 +35,16 @@ public class CuentaContableResponse
     public string TipoSaldo { get; set; } = string.Empty;
 
     public int? IdNaturaleza { get; set; }
+
+    public string Naturaleza => (IdNaturaleza, Codigo.FirstOrDefault()) switch
+    {
+        (1, _) or (null, '1') => "ACTIVO",
+        (2, _) or (null, '2') => "PASIVO",
+        (3, _) or (null, '3') => "PATRIMONIO NETO",
+        (4, _) or (null, '4') => "INGRESOS",
+        (5, _) or (null, '5') => "EGRESOS",
+        _ => "-"
+    };
 
     public int? IdRecursoDebe { get; set; }
 
