@@ -70,7 +70,11 @@ public class CuentaContableResponse
 
     public int CantidadDeHijas { get; set; }
 
+    public int CantidadDeHijasActivas { get; set; }
+
     public bool TieneMovimientos { get; set; }
+
+    public bool TieneRelacionMatrizActiva { get; set; }
 
     public string? UserIng { get; set; }
 

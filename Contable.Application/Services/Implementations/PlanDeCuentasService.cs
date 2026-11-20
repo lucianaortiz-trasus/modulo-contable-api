@@ -195,7 +195,9 @@ public class PlanDeCuentasService(
         if (cuenta is null) return NotFound<CuentaContableResponse>("La cuenta no existe.");
 
         var respuesta = Mapear(cuenta, await ContarHijas(idCtaContable));
+        respuesta.CantidadDeHijasActivas = await ContarHijasActivas(idCtaContable);
         respuesta.TieneMovimientos = await TieneMovimientos(idCtaContable);
+        respuesta.TieneRelacionMatrizActiva = cuenta.EstaActiva && await TieneRelacionMatriz(idCtaContable);
 
         if (cuenta.IdCtaContableRel is not null)
         {
@@ -530,13 +532,36 @@ public class PlanDeCuentasService(
 
         if (cuenta is null) return NotFound<bool>("La cuenta no existe.");
 
-        var contexto = new ContextoCuenta(
-            CantidadDeHijas: await ContarHijas(idCtaContable),
-            TieneMovimientos: await TieneMovimientos(idCtaContable));
+        // 1. ¿Hay relaciones activas con esta cuenta en la Matriz Contable?
+        if (cuenta.EstaActiva && await TieneRelacionMatriz(idCtaContable))
+        {
+            return BadRequest("No se puede eliminar/desactivar la cuenta porque hay relaciones activas en la Matriz Contable", false);
+        }
 
-        var validacion = ReglasJerarquiaCuentas.ValidarEliminacion(contexto);
+        // 2. ¿La cuenta está involucrada en asientos contables?
+        var tieneMovimientos = await TieneMovimientos(idCtaContable);
 
-        if (!validacion.EsValida) return BadRequest(validacion.Mensaje, false);
+        if (tieneMovimientos)
+        {
+            var hijasActivas = await ContarHijasActivas(idCtaContable);
+            if (hijasActivas > 0)
+            {
+                return BadRequest("No se puede desactivar la cuenta porque hay cuentas inferiores activas", false);
+            }
+
+            cuenta.Activa = Inactiva;
+            cuenta.UserAct = ObtenerUsuarioAuditoria(cuenta.UserIng);
+            cuenta.FecAct = DateTime.Now;
+            await _ejecucionContext.SaveChangesAsync();
+
+            return Ok(true);
+        }
+
+        var hijasTotales = await ContarHijas(idCtaContable);
+        if (hijasTotales > 0)
+        {
+            return BadRequest("No se puede eliminar la cuenta porque posee cuentas inferiores", false);
+        }
 
         _ejecucionContext.TCuentasContables.Remove(cuenta);
         await _ejecucionContext.SaveChangesAsync();
@@ -719,6 +744,12 @@ public class PlanDeCuentasService(
 
     private async Task<int> ContarHijas(int idCtaContable)
         => await _ejecucionContext.TCuentasContables.CountAsync(c => c.IdCtaContableRel == idCtaContable);
+
+    private async Task<int> ContarHijasActivas(int idCtaContable)
+        => await _ejecucionContext.TCuentasContables.CountAsync(c => c.IdCtaContableRel == idCtaContable && c.Activa == Activa);
+
+    private async Task<bool> TieneRelacionMatriz(int idCtaContable)
+        => await Existe(_ejecucionContext.TMatrizContable.Where(m => m.IdCtaContable == idCtaContable));
 
     /// <summary>
     /// Existe al menos una fila que cumpla la condicion.
