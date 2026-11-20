@@ -471,30 +471,41 @@ public class PlanDeCuentasService(
 
         if (cuenta is null) return NotFound<CuentaContableResponse>("La cuenta no existe.");
 
+        if (string.IsNullOrWhiteSpace(request.Nombre))
+        {
+            return BadRequest<CuentaContableResponse>("El nombre es obligatorio.");
+        }
+
+        if (request.Nombre.Trim().Length > 70)
+        {
+            return BadRequest<CuentaContableResponse>("El nombre no puede superar los 70 caracteres.");
+        }
+
+        if (!ReglasJerarquiaCuentas.TiposDeSaldoValidos.Contains(request.TipoSaldo))
+        {
+            return BadRequest<CuentaContableResponse>("El tipo de saldo tiene que ser D (deudor) o A (acreedor).");
+        }
+
         var hijas = await ContarHijas(idCtaContable);
+        var tieneMovimientos = await TieneMovimientos(idCtaContable);
 
-        // El codigo y el padre no se tocan desde la edicion: mover una cuenta de lugar arrastra a
-        // toda su rama y a los asientos ya imputados. Para eso hay que dar de baja y volver a crear.
-        var contexto = new ContextoCuenta(
-            CodigoYaExiste: false,
-            PadreExiste: cuenta.IdCtaContableRel is not null,
-            CodigoPadre: await CodigoDe(cuenta.IdCtaContableRel),
-            NivelPadre: null,
-            CantidadDeHijas: hijas,
-            TieneMovimientos: await TieneMovimientos(idCtaContable));
+        if (tieneMovimientos && !string.Equals(cuenta.TipoSaldo, request.TipoSaldo, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest<CuentaContableResponse>(
+                "No se puede modificar el tipo de saldo de una cuenta que registra asientos contables.");
+        }
 
-        var datos = new DatosCuenta(
-            cuenta.Codigo, request.Nombre, cuenta.Nivel, request.TipoSaldo, request.Imputable, request.Activa);
-
-        var validacion = ReglasJerarquiaCuentas.ValidarEdicion(datos, contexto);
-
-        if (!validacion.EsValida) return BadRequest<CuentaContableResponse>(validacion.Mensaje);
+        if (request.Imputable && hijas > 0)
+        {
+            return BadRequest<CuentaContableResponse>(
+                $"No se puede marcar como imputable: la cuenta tiene {hijas} cuenta(s) hija(s).");
+        }
 
         cuenta.Nombre = request.Nombre.Trim();
         cuenta.Activa = request.Activa ? Activa : Inactiva;
         cuenta.Imputable = request.Imputable ? Si : No;
-        cuenta.TipoSaldo = request.TipoSaldo;
-        cuenta.IdNaturaleza = request.IdNaturaleza;
+        cuenta.TipoSaldo = tieneMovimientos ? cuenta.TipoSaldo : request.TipoSaldo;
+        cuenta.IdNaturaleza = request.IdNaturaleza ?? cuenta.IdNaturaleza;
         cuenta.IdRecursoDebe = request.IdRecursoDebe;
         cuenta.IdRecursoHaber = request.IdRecursoHaber;
         cuenta.Auxiliar = request.Auxiliar ? Si : No;
