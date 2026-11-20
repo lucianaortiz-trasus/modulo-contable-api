@@ -215,4 +215,27 @@ public class ArbolDeCuentasTests
         raiz.CuentaSuperior.Should().Be("No posee");
         raiz.Naturaleza.Should().Be("ACTIVO");
     }
+
+    [Fact]
+    public void CalcularProximoCodigoPlan_GeneraCorrelativosNivel1AMaximo8()
+    {
+        var raiz = Contable.Application.Services.Implementations.PlanDeCuentasService
+            .CalcularProximoCodigoPlan(null, 0, ["1", "2", "3", "4", "5"]);
+        raiz.Codigo.Should().Be("6");
+        raiz.Nivel.Should().Be(1);
+
+        var subcuenta = Contable.Application.Services.Implementations.PlanDeCuentasService
+            .CalcularProximoCodigoPlan("02.01.01", 3, ["02.01.01.01", "02.01.01.02"]);
+        subcuenta.Codigo.Should().Be("02.01.01.03");
+        subcuenta.Nivel.Should().Be(4);
+
+        var nivel8 = Contable.Application.Services.Implementations.PlanDeCuentasService
+            .CalcularProximoCodigoPlan("02.01.01.01.01.01.01", 7, ["02.01.01.01.01.01.01.01"]);
+        nivel8.Codigo.Should().Be("02.01.01.01.01.01.01.02");
+        nivel8.Nivel.Should().Be(8);
+
+        var bloqueadoNivel9 = Contable.Application.Services.Implementations.PlanDeCuentasService
+            .CalcularProximoCodigoPlan("02.01.01.01.01.01.01.01", 8, []);
+        bloqueadoNivel9.HayDisponible.Should().BeFalse();
+    }
 }

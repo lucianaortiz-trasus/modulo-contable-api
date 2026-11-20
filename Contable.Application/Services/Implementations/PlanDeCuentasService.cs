@@ -212,6 +212,78 @@ public class PlanDeCuentasService(
         return Ok(respuesta);
     }
 
+    public const int NivelMaximoPlan = 8;
+
+    public static ProximoCodigo CalcularProximoCodigoPlan(
+        string? codigoPadre,
+        int nivelPadre,
+        IEnumerable<string?> codigosHijas)
+    {
+        var nivelHijo = nivelPadre + 1;
+        if (nivelHijo < 1 || nivelHijo > NivelMaximoPlan)
+        {
+            return new ProximoCodigo(null, nivelHijo, null, 0);
+        }
+
+        var hijos = codigosHijas?.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!.Trim()).ToArray() ?? [];
+
+        if (nivelHijo == 1)
+        {
+            var usadosRaiz = hijos
+                .Select(c => int.TryParse(c.Split('.')[0], out var v) ? (int?)v : null)
+                .Where(v => v.HasValue)
+                .Select(v => v!.Value)
+                .ToHashSet();
+
+            for (var candidato = 1; candidato <= 99; candidato++)
+            {
+                if (usadosRaiz.Contains(candidato)) continue;
+                return new ProximoCodigo(candidato.ToString(), 1, candidato, 0);
+            }
+
+            return new ProximoCodigo(null, 1, null, 0);
+        }
+
+        var prefijo = nivelPadre == 1
+            ? (codigoPadre ?? string.Empty).Trim().PadLeft(2, '0')
+            : (codigoPadre ?? string.Empty).Trim();
+
+        var usados = new HashSet<int>();
+        var ignorados = 0;
+
+        foreach (var h in hijos)
+        {
+            var partes = h.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (partes.Length < nivelHijo)
+            {
+                ignorados++;
+                continue;
+            }
+
+            var prefijoHija = string.Join('.', partes.Take(nivelPadre).Select(p => p.PadLeft(2, '0')));
+            var prefijoComparar = string.Join('.', prefijo.Split('.', StringSplitOptions.RemoveEmptyEntries).Select(p => p.PadLeft(2, '0')));
+
+            if (!string.Equals(prefijoHija, prefijoComparar, StringComparison.OrdinalIgnoreCase))
+            {
+                ignorados++;
+                continue;
+            }
+
+            if (int.TryParse(partes[nivelHijo - 1], out var segValor))
+            {
+                usados.Add(segValor);
+            }
+        }
+
+        for (var candidato = 1; candidato <= 99; candidato++)
+        {
+            if (usados.Contains(candidato)) continue;
+            return new ProximoCodigo($"{prefijo}.{candidato:D2}", nivelHijo, candidato, ignorados);
+        }
+
+        return new ProximoCodigo(null, nivelHijo, null, ignorados);
+    }
+
     public async Task<OperationResponse<ProximoCodigoResponse>> GetProximoCodigo(int? idCtaContableRel)
     {
         string? codigoPadre = null;
@@ -227,10 +299,10 @@ public class PlanDeCuentasService(
             nivelPadre = padre.Nivel ?? CodigoCuenta.NivelSegunCodigo(padre.Codigo);
         }
 
-        if (nivelPadre >= CodigoCuenta.NivelMaximo)
+        if (nivelPadre >= NivelMaximoPlan)
         {
             return BadRequest<ProximoCodigoResponse>(
-                $"El plan de cuentas llega hasta el nivel {CodigoCuenta.NivelMaximo}.");
+                $"El plan de cuentas llega hasta el nivel {NivelMaximoPlan}.");
         }
 
         var codigosHijas = await ConsultaBase()
@@ -238,7 +310,7 @@ public class PlanDeCuentasService(
             .Select(c => c.Codigo)
             .ToListAsync();
 
-        var proximo = ReglasProximoCodigo.Calcular(codigoPadre, nivelPadre, codigosHijas);
+        var proximo = CalcularProximoCodigoPlan(codigoPadre, nivelPadre, codigosHijas);
 
         return Ok(new ProximoCodigoResponse
         {
@@ -256,13 +328,34 @@ public class PlanDeCuentasService(
 
         if (request.IdCtaContableRel is not null)
         {
-            padre = await ConsultaBase().FirstOrDefaultAsync(c => c.IdCtaContable == request.IdCtaContableRel);
+            padre = await _ejecucionContext.TCuentasContables
+                .FirstOrDefaultAsync(c => c.IdCtaContable == request.IdCtaContableRel);
 
             if (padre is null) return NotFound<CuentaContableResponse>("La cuenta padre no existe.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.Nombre))
+        {
+            return BadRequest<CuentaContableResponse>("El nombre es obligatorio.");
+        }
+
+        if (request.Nombre.Trim().Length > 70)
+        {
+            return BadRequest<CuentaContableResponse>("El nombre no puede superar los 70 caracteres.");
+        }
+
+        if (!ReglasJerarquiaCuentas.TiposDeSaldoValidos.Contains(request.TipoSaldo))
+        {
+            return BadRequest<CuentaContableResponse>("El tipo de saldo tiene que ser D (deudor) o A (acreedor).");
+        }
+
         var nivelPadre = padre?.Nivel ?? CodigoCuenta.NivelSegunCodigo(padre?.Codigo);
         var nivel = request.Nivel ?? nivelPadre + 1;
+
+        if (nivel < 1 || nivel > NivelMaximoPlan)
+        {
+            return BadRequest<CuentaContableResponse>($"El nivel tiene que estar entre 1 y {NivelMaximoPlan}.");
+        }
 
         // Sin codigo explicito se toma el proximo libre: es el camino normal desde el arbol.
         var codigo = request.Codigo?.Trim();
@@ -274,7 +367,7 @@ public class PlanDeCuentasService(
                 .Select(c => c.Codigo)
                 .ToListAsync();
 
-            var proximo = ReglasProximoCodigo.Calcular(padre?.Codigo, nivelPadre, codigosHijas);
+            var proximo = CalcularProximoCodigoPlan(padre?.Codigo, nivelPadre, codigosHijas);
 
             if (!proximo.HayDisponible)
             {
@@ -286,17 +379,47 @@ public class PlanDeCuentasService(
             nivel = proximo.Nivel;
         }
 
-        var contexto = new ContextoCuenta(
-            CodigoYaExiste: await Existe(_ejecucionContext.TCuentasContables.Where(c => c.Codigo == codigo)),
-            PadreExiste: padre is not null,
-            CodigoPadre: padre?.Codigo,
-            NivelPadre: padre?.Nivel,
-            PadreEsImputable: padre?.EsImputable ?? false);
+        if (await Existe(ConsultaBase().Where(c => c.Codigo == codigo)))
+        {
+            return BadRequest<CuentaContableResponse>($"Ya existe una cuenta con el codigo {codigo}.");
+        }
 
-        var datos = new DatosCuenta(codigo, request.Nombre, nivel, request.TipoSaldo, request.Imputable, request.Activa);
-        var validacion = ReglasJerarquiaCuentas.ValidarAlta(datos, contexto);
+        // T.16456: Si la cuenta superior era imputable, pasa automaticamente a no imputable.
+        var referencia = padre ?? await ConsultaBase()
+            .OrderBy(c => c.Nivel)
+            .ThenBy(c => c.IdCtaContable)
+            .FirstOrDefaultAsync();
 
-        if (!validacion.EsValida) return BadRequest<CuentaContableResponse>(validacion.Mensaje);
+        var usuarioActual = ObtenerUsuarioAuditoria(referencia?.UserIng);
+
+        if (padre is not null && padre.Imputable == Si)
+        {
+            padre.Imputable = No;
+            padre.UserAct = usuarioActual;
+            padre.FecAct = DateTime.Now;
+        }
+
+        var idNaturaleza = request.IdNaturaleza
+            ?? padre?.IdNaturaleza
+            ?? (int.TryParse(codigo!.Split('.')[0], out var nat) && nat is >= 1 and <= 5 ? nat : null);
+
+        var jurisdiccionCache = GetJurisdiccionCache();
+        var vigenciaCache = GetIdVigencia();
+
+        var idJurisdiccion = padre?.IdJurisdiccion
+            ?? (jurisdiccionCache > 0 ? jurisdiccionCache : referencia?.IdJurisdiccion ?? 0);
+
+        var idVigencia = padre?.IdVigencia
+            ?? (vigenciaCache > 0 ? vigenciaCache : referencia?.IdVigencia ?? 0);
+
+        if (idVigencia <= 0)
+        {
+            idVigencia = await _presupuestoContext.TVigencias
+                .AsNoTracking()
+                .Where(v => v.ActivoEjecucion == "S")
+                .Select(v => v.IdVigencia)
+                .FirstOrDefaultAsync();
+        }
 
         var cuenta = new TCuentaContable
         {
@@ -306,10 +429,10 @@ public class PlanDeCuentasService(
             Codigo = codigo!,
             Nombre = request.Nombre.Trim(),
             Nivel = nivel,
-            Activa = request.Activa ? Activa : Inactiva,
-            Imputable = request.Imputable ? Si : No,
+            Activa = Activa,
+            Imputable = Si,
             TipoSaldo = request.TipoSaldo,
-            IdNaturaleza = request.IdNaturaleza ?? padre?.IdNaturaleza,
+            IdNaturaleza = idNaturaleza,
             IdRecursoDebe = request.IdRecursoDebe,
             IdRecursoHaber = request.IdRecursoHaber,
             Auxiliar = request.Auxiliar ? Si : No,
@@ -319,9 +442,9 @@ public class PlanDeCuentasService(
             IdProveedor = request.IdProveedor,
             Amortizacion = request.Amortizacion,
             IngresoPropio = request.IngresoPropio,
-            IdJurisdiccion = padre?.IdJurisdiccion ?? GetJurisdiccionCache(),
-            IdVigencia = padre?.IdVigencia ?? GetIdVigencia(),
-            UserIng = GetUserCache(),
+            IdJurisdiccion = idJurisdiccion,
+            IdVigencia = idVigencia,
+            UserIng = usuarioActual,
             FecIng = DateTime.Now,
         };
 
@@ -329,6 +452,16 @@ public class PlanDeCuentasService(
         await _ejecucionContext.SaveChangesAsync();
 
         return Ok(Mapear(cuenta, 0));
+    }
+
+    private string ObtenerUsuarioAuditoria(string? fallback = null)
+    {
+        var usuario = GetUserCache()?.Trim();
+        if (string.IsNullOrEmpty(usuario))
+        {
+            usuario = !string.IsNullOrWhiteSpace(fallback) ? fallback.Trim() : "SISTEMA";
+        }
+        return usuario.Length > 20 ? usuario[..20] : usuario;
     }
 
     public async Task<OperationResponse<CuentaContableResponse>> Editar(int idCtaContable, CuentaContableRequest request)
@@ -371,7 +504,7 @@ public class PlanDeCuentasService(
         cuenta.IdProveedor = request.IdProveedor;
         cuenta.Amortizacion = request.Amortizacion;
         cuenta.IngresoPropio = request.IngresoPropio;
-        cuenta.UserAct = GetUserCache();
+        cuenta.UserAct = ObtenerUsuarioAuditoria(cuenta.UserIng);
         cuenta.FecAct = DateTime.Now;
 
         await _ejecucionContext.SaveChangesAsync();
